@@ -1,5 +1,13 @@
 # Historial de versiones
 
+## Cambios preparados — 2026-10-18
+
+- Historial de tickets del mostrador, junto al turno, con fechas y detalle de la compra original.
+- Consulta paginada y permisos coherentes con la consulta de tickets existente.
+- Botón para limpiar el buscador; limpieza al enfocarlo y después de cobrar.
+- Corrección de códigos concatenados cuando se escanea sobre una búsqueda previa.
+- Pruebas de fechas, pagos, créditos, total cero, anulaciones y lecturas consecutivas.
+
 ## 0.1.0-beta — 2026-10-18
 
 Primera versión registrada en este repositorio; agrupa el desarrollo previo sin atribuirle un historial de commits inexistente.

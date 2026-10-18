@@ -75,8 +75,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise Error('Objeto JSON requerido')
             else:
                 data = {k:v[0] for k,v in parse_qs(urlparse(self.path).query).items()}
-            if not write and path in ('/','/entities-ui.js','/card-fees-ui.js','/billing-ui.js','/login-hints.js','/live-view.js','/owner-access-ui.js','/metric-help.js','/app.js','/style.css','/inventory-ui.js','/direccion','/direccion/','/direccion/panel.js','/stock.js','/reports.js','/promotions-ui.js','/branding.js','/navigation.js'):
-                filename,mime = {'/entities-ui.js':('entities-ui.js','text/javascript'),'/card-fees-ui.js':('card-fees-ui.js','text/javascript'),'/billing-ui.js':('billing-ui.js','text/javascript'),'/login-hints.js':('login-hints.js','text/javascript'),'/live-view.js':('live-view.js','text/javascript'),'/owner-access-ui.js':('owner-access-ui.js','text/javascript'),'/metric-help.js':('metric-help.js','text/javascript'),'/navigation.js':('navigation.js','text/javascript'),'/branding.js':('branding.js','text/javascript'),'/':('index.html','text/html'),'/app.js':('app.js','text/javascript'),'/inventory-ui.js':('inventory-ui.js','text/javascript'),'/direccion':('direction.html','text/html'),'/direccion/':('direction.html','text/html'),'/direccion/panel.js':('direction.js','text/javascript'),'/promotions-ui.js':('promotions-ui.js','text/javascript'),'/reports.js':('reports.js','text/javascript'),'/stock.js':('stock.js','text/javascript'),'/style.css':('style.css','text/css')}[path]
+            if not write and path in ('/','/tickets-ui.js','/entities-ui.js','/card-fees-ui.js','/billing-ui.js','/login-hints.js','/live-view.js','/owner-access-ui.js','/metric-help.js','/app.js','/style.css','/inventory-ui.js','/direccion','/direccion/','/direccion/panel.js','/stock.js','/reports.js','/promotions-ui.js','/branding.js','/navigation.js'):
+                filename,mime = {'/tickets-ui.js':('tickets-ui.js','text/javascript'),'/entities-ui.js':('entities-ui.js','text/javascript'),'/card-fees-ui.js':('card-fees-ui.js','text/javascript'),'/billing-ui.js':('billing-ui.js','text/javascript'),'/login-hints.js':('login-hints.js','text/javascript'),'/live-view.js':('live-view.js','text/javascript'),'/owner-access-ui.js':('owner-access-ui.js','text/javascript'),'/metric-help.js':('metric-help.js','text/javascript'),'/navigation.js':('navigation.js','text/javascript'),'/branding.js':('branding.js','text/javascript'),'/':('index.html','text/html'),'/app.js':('app.js','text/javascript'),'/inventory-ui.js':('inventory-ui.js','text/javascript'),'/direccion':('direction.html','text/html'),'/direccion/':('direction.html','text/html'),'/direccion/panel.js':('direction.js','text/javascript'),'/promotions-ui.js':('promotions-ui.js','text/javascript'),'/reports.js':('reports.js','text/javascript'),'/stock.js':('stock.js','text/javascript'),'/style.css':('style.css','text/css')}[path]
                 return self.send(200,(ROOT/'static'/filename).read_bytes(),mime+'; charset=utf-8')
             pos = self.server.pos
             if not write and path=='/favicon.svg':return self.send(200,(ROOT/'static'/'favicon.svg').read_bytes(),'image/svg+xml')
@@ -359,11 +359,15 @@ class Handler(BaseHTTPRequestHandler):
                       'expected_cents':report['expected_cents'],'counted_cents':shift['counted_cents'],
                       'difference_cents':report.get('difference_cents')})
                 return {'shifts':result,'net_sales_cents':sum(r['net_sales_cents'] for r in result)}
+            if path=='/api/tickets':
+                import ticket_history
+                return ticket_history.listing(db,uid,permissions,data)
             if path=='/api/ticket':
                 ticket = pos.ticket(db,int(data['id']))
                 if ticket['user_id']!=uid and not permissions.intersection({'reports.view','sales.return','sales.void'}):
                     raise Error('Ticket ajeno',403)
-                return ticket
+                import ticket_history
+                return ticket_history.describe(db,ticket)
             if path=='/api/inventory/batches':
                 columns = 'b.id,b.product_id,b.lot_number,b.expires_on,b.quantity,b.supplier_id'
                 if 'costs.view' in permissions:

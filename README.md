@@ -19,6 +19,7 @@ Antes de actualizar una instalación existente, exporta un respaldo completo fue
 - Apertura y cierre de turnos; entradas y salidas de caja.
 - Inventario por lotes, recepciones, ajustes con motivo y valoración a costo de compra.
 - Historial, métricas, exportación a Excel/CSV y respaldos completos.
+- Consulta de tickets por fecha desde el mostrador, con detalle de productos, pago y cambio.
 - Usuarios y permisos configurables; identidad visual del negocio.
 - Panel central de consulta y selección de sucursales, manteniendo inventario y caja separados por local.
 
@@ -57,7 +58,7 @@ Para una publicación nueva usa `Crear-pagina.cmd`. Para actualizar un servicio 
 
 ## Calidad y límites conocidos
 
-La última comprobación local aprobó 201 pruebas Python y 22 pruebas de interfaz/servicio central. La simulación acelerada de 183 días comprobó 14,640 compras con 749,726 comparaciones independientes sin discrepancias observadas. Estos resultados no garantizan ausencia de errores futuros ni sustituyen el piloto en el equipo real.
+La última comprobación local aprobó 207 pruebas Python y 22 pruebas de interfaz/servicio central. La simulación acelerada de 183 días comprobó 14,640 compras con 749,726 comparaciones independientes sin discrepancias observadas. Estos resultados no garantizan ausencia de errores futuros ni sustituyen el piloto en el equipo real.
 
 - Facturación: entorno de pruebas; la emisión fiscal real no está habilitada como una función lista para producción.
 - Las devoluciones de ventas a crédito están bloqueadas y requieren resolver la deuda mediante un procedimiento específico.

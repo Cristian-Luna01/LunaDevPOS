@@ -14,7 +14,7 @@ Pruebas del punto de venta, dentro de `punto-de-venta`:
 ```powershell
 python -m pip install -r requirements-test.txt
 python -m unittest discover -s . -p "test_*.py"
-node --test test_direction_responses.js test_financial_ui.js
+node --test test_direction_responses.js test_financial_ui.js test_checkout_scanner.cjs
 ```
 
 Pruebas del panel, dentro de `pagina-administrador`:

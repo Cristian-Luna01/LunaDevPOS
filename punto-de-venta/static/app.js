@@ -15,37 +15,49 @@ function renderProducts(){
  $('products').innerHTML=products.map((p,i)=>{const reserved=cart.find(l=>l.product.id===p.id)?.quantity||0;return `<button class="product" data-index="${i}"><strong>${esc(p.name)}</strong><small>${esc(p.generic_name||p.barcode)}</small><b>${promotionLabel(p)}</b><span class="stock">${Math.max(0,p.stock-reserved)} disponibles · ${reserved} en carrito</span></button>`;}).join('')||`<p class="empty">${$('search').value.trim()?'No hay coincidencias.':'Busca un producto o escanea su código para comenzar. Consulta las ofertas en Promociones.'}</p>`;
 }
 async function searchProducts(more=false){const version=++queryVersion;if(!more)page=0;const q=$('search').value.trim();if(!q){products=[];$('moreProducts').hidden=true;renderProducts();return;}const result=await api('/products?q='+encodeURIComponent(q)+'&offset='+page*40);if(version!==queryVersion)return;products=more?[...products,...result]:result;$('moreProducts').hidden=result.length<40;renderProducts();if(result.some(p=>p.barcode===q)&&document.activeElement===$('search'))$('search').select();}
-let searchTimer;$('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(act(()=>searchProducts()),160);};
+let searchTimer;
+function updateSearchClear(){if($('clearSearch'))$('clearSearch').hidden=!$('search').value;}
+function clearCheckoutSearch(focus=false){
+ clearTimeout(searchTimer);scanBuffer='';scanLast=0;scanTarget=null;$('search').value='';queryVersion++;page=0;products=[];$('moreProducts').hidden=true;renderProducts();updateSearchClear();
+ if(focus)$('search').focus();
+}
+$('search').oninput=()=>{updateSearchClear();clearTimeout(searchTimer);searchTimer=setTimeout(act(()=>searchProducts()),160);};
+if($('clearSearch'))$('clearSearch').onclick=()=>clearCheckoutSearch(true);
 let barcodeQueue=Promise.resolve();
-$('search').onfocus=()=>$('search').select();
+$('search').onfocus=()=>clearCheckoutSearch();
 $('search').onkeydown=act(async e=>{
  if(e.key!=='Enter'&&!(e.key==='Tab'&&/^\d{6,}$/.test($('search').value.trim())))return;
- e.preventDefault();clearTimeout(searchTimer);const code=$('search').value.trim();if(!code)return;
- $('search').value='';queryVersion++;
+ e.preventDefault();const code=$('search').value.trim();if(!code)return;
+ const owner=me?.user?.id,shift=me?.shift?.id;
+ clearCheckoutSearch();const version=queryVersion;
  barcodeQueue=barcodeQueue.then(async()=>{
+  if(!me?.shift||me.shift.id!==shift||me.user?.id!==owner)return;
   const found=await api('/products?q='+encodeURIComponent(code)+'&offset=0');
+  if(!me?.shift||me.shift.id!==shift||me.user?.id!==owner)return;
   const exact=found.find(p=>p.barcode===code);
   if(exact)await add(exact);
-  else if(!$('search').value){products=found;$('moreProducts').hidden=found.length<40;renderProducts();if(!found.length)notify('No se encontró el producto con código o nombre: '+code);}
+  else if(version===queryVersion&&!$('search').value){products=found;$('moreProducts').hidden=found.length<40;renderProducts();if(!found.length)notify('No se encontró el producto con código o nombre: '+code);}
   if(currentView==='checkout'&&!$('dialog').open&&(!document.activeElement||document.activeElement===$('search')||document.activeElement===document.body))$('search').focus();
  }).catch(error=>notify(error.message||'No se pudo buscar el producto. Escanea nuevamente.'));
  await barcodeQueue;
 });
-// Lecturas de pistola fuera del campo: ráfaga rápida + Enter, solo Mostrador.
-let scanBuffer='',scanLast=0;
+// El lector HID se reconoce por una ráfaga rápida terminada en Enter.
+// Dentro del buscador se descarta el prefijo anterior solo al reconocer la lectura completa.
+let scanBuffer='',scanLast=0,scanTarget=null;
 document.addEventListener('keydown',e=>{
- const reset=()=>{scanBuffer='';scanLast=0;};
+ const reset=()=>{scanBuffer='';scanLast=0;scanTarget=null;};
  if(!me?.shift||currentView!=='checkout'||$('workspace').hidden||document.querySelector('dialog[open]')||!$('shiftGate').hidden||e.ctrlKey||e.altKey||e.metaKey){reset();return;}
- const target=e.target;
- if(target===$('search')||target?.closest?.('input,textarea,select,[contenteditable="true"]')){reset();return;}
- const now=e.timeStamp||Date.now();
+ const target=e.target,inSearch=target===$('search');
+ if(!inSearch&&target?.closest?.('input,textarea,select,[contenteditable="true"]')){reset();return;}
+ const now=e.timeStamp||Date.now(),gap=inSearch?35:80;
  if(e.key==='Enter'){
-  const code=scanBuffer;const valid=code.length>=4&&now-scanLast<=100;reset();
+  const code=scanBuffer,valid=scanTarget===target&&code.length>=4&&now-scanLast<=(inSearch?75:100);reset();
   if(valid){e.preventDefault();e.stopImmediatePropagation();$('search').value=code;$('search').onkeydown(e);}
   return;
  }
  if(e.key.length===1&&!/\s/.test(e.key)&&!e.repeat){
-  if(now-scanLast>80)scanBuffer='';scanBuffer=(scanBuffer+e.key).slice(-500);scanLast=now;e.preventDefault();
+  if(scanTarget!==target||now-scanLast>gap)scanBuffer='';scanBuffer=(scanBuffer+e.key).slice(-500);scanLast=now;scanTarget=target;
+  if(!inSearch)e.preventDefault();
  }else if(e.key!=='Shift')reset();
 },true);
 $('moreProducts').onclick=act(async()=>{page++;await searchProducts(true);});
@@ -119,7 +131,7 @@ $('pay').onclick=act(async()=>{
   const payments=on_account||paymentTotal===0?[]:[{method:d.method,amount_cents:paymentTotal,...(d.method==='cash'?{tendered_cents:cents(d.received)}:{})}];
   const body={on_account,customer_id:on_account?Number(d.credit_customer):customer()?.id||null,items:cart.map(l=>({product_id:l.product.id,quantity:l.quantity,...(l.prescription?{prescription:l.prescription}:{})})),payments};
   const signature=JSON.stringify(body);if(!pendingSale||pendingSale.signature!==signature)pendingSale={signature,key:crypto.randomUUID()};
-  const ticket=await api('/sales',{...body,request_key:pendingSale.key});cart=[];pendingSale=null;renderCart();renderReceipt(ticket);notify(`Ticket #${ticket.id} ${on_account?'registrado a crédito':'confirmado · Cambio '+money(ticket.change_cents)}`);await searchProducts();
+  const ticket=await api('/sales',{...body,request_key:pendingSale.key});cart=[];pendingSale=null;renderCart();clearCheckoutSearch();renderReceipt(ticket);notify(`Ticket #${ticket.id} ${on_account?'registrado a crédito':'confirmado · Cambio '+money(ticket.change_cents)}`);await searchProducts();
  },'Confirmar venta');
  $('changePreview').hidden=false;
  const form=$('dialogForm');
