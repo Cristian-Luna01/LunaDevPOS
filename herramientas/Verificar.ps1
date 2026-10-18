@@ -1,5 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
+& (Join-Path $PSScriptRoot 'Preparar-conector.ps1')
 Push-Location (Join-Path $taskRoot 'punto-de-venta')
 try {
     python -m pip install -r requirements-test.txt
