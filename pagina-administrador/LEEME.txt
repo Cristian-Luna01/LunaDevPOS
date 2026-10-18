@@ -1,0 +1,11 @@
+LunaDev POS — publicación de una página por negocio
+
+1. Instala Node.js LTS en tu computadora de configuración, desde https://nodejs.org.
+2. Extrae este kit en una carpeta nueva por negocio.
+3. Ejecuta Crear-pagina.cmd y autoriza la cuenta de Cloudflare correcta.
+4. Conserva DATOS-PRIVADOS-DEL-DUENO.txt en privado y copia el enlace workers.dev desde Cloudflare.
+5. Crea las sucursales en la página y enlaza cada POS con su propia clave.
+
+Este kit no lleva cuentas o claves del desarrollador. Después de ejecutarlo sí contendrá credenciales locales: no lo redistribuyas. No sustituye respaldos completos del POS. Consulta Manual-LunaDevPOS.html para el recorrido completo.
+
+Versión de movimientos y 30 días: consulta las instrucciones actualizadas de la entrega. Los precios requieren actualizar el programa del mostrador.

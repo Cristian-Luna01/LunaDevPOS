@@ -1,0 +1,20 @@
+Nuvaria POS — versión de prueba para Windows de 64 bits
+
+Abre Instalar-NuvariaPOS-Prueba.exe. Instala para el usuario actual y crea un acceso directo en el escritorio. No necesitas instalar Python. La primera apertura solicita nombre del negocio, usuario administrador y contraseña en una ventana visual. No se incluyen productos, ventas, clientes ni credenciales de la instalación anterior.
+
+Programa: %LOCALAPPDATA%\Programs\NuvariaPOSPrueba
+Datos: %LOCALAPPDATA%\NuvariaPOSPrueba\data\pos.sqlite3
+
+Abre el mostrador o Administración desde la ventana de inicio. Mantén esa ventana abierta mientras trabajas. Para cerrar normalmente, primero cierra todos los turnos. La versión actual conserva la limitación de recuperación tras apagones; tampoco permite devoluciones de compras a crédito. Es una versión para prueba acompañada, no una certificación de producción.
+
+No modifica el proyecto original ni el otro punto de venta. Esta versión usa datos separados. La prueba de convivencia con el sistema antiguo y de rendimiento se debe realizar en la computadora de la farmacia. No importa automáticamente una base anterior.
+
+Se generó con Python 3.12.14 y PyInstaller 6.22.3 para Windows x64. Se verificó en el entorno Windows 11 actual. Falta validar en la computadora Windows 10 del negocio y comprobar visualmente las ventanas allí. La prueba automática del instalador verifica extracción y ejecución desde la carpeta instalada; no creó un acceso directo real en tu escritorio. El instalador todavía no está firmado digitalmente.
+
+Pruebas: 89 existentes + 3 del inicio visual (validaciones, persistencia de la cuenta y nombre, inventario vacío, bloqueo de cierre con turno abierto). Ejecutable y ejecutable instalado: prueba de cuenta ficticia, recursos web, base vacía e integridad SQLite en carpetas separadas. No se utilizaron datos operativos.
+
+La Administración sigue siendo local. Acceso desde el teléfono, sincronización y consulta sin conexión todavía no forman parte de este instalador.
+
+La actualización automática y el desinstalador no forman parte de esta primera entrega. El instalador rechaza instalar sobre la misma carpeta existente. Los datos permanecen separados; no los borres para actualizar.
+
+El código editable se conserva en proyecto-instalable-fuente.zip. Los archivos desktop.py e installer.py implementan las ventanas visuales; las especificaciones .spec permiten reproducir el empaquetado con PyInstaller desde esa carpeta. Primero genera NuvariaPOS, comprime el contenido de su carpeta como programa.zip y después genera el instalador. No añadas la carpeta de datos al paquete.

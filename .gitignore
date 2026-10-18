@@ -1,0 +1,42 @@
+# Datos privados y configuraciÃ³n por negocio
+.env
+.env.*
+!.env.example
+.dev.vars
+**/data/
+*.sqlite3*
+*.db
+*.db-*
+*.botica.json
+**/respaldos/
+**/backups/
+**/.config-cloudflare/
+**/.wrangler/
+**/CONFIGURADO.json
+**/DATOS-PRIVADOS-*
+**/wrangler.json
+**/wrangler.jsonc
+*.pem
+*.key
+*.pfx
+*.p12
+# Dependencias y compilaciones
+**/node_modules/
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+build/
+dist/
+outputs/
+*.exe
+*.dll
+*.zip
+*.log
+
+# Autenticación y artefactos adicionales
+**/github-auth*/
+**/gh-config*/
+*.cer
+*.sqlite
+*.sqlite-*

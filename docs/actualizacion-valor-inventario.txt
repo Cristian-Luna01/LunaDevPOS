@@ -1,0 +1,37 @@
+﻿LunaDev POS · Actualización de valor de inventario · 18 de octubre de 2026
+
+NOVEDAD
+En Inventario se muestra «Total de valor de inventario (a costo de compra)».
+Suma las unidades vendibles de cada lote multiplicadas por el costo de ese lote.
+No utiliza el último costo para valorar todos los lotes ni el precio de venta.
+Excluye caducados, cuarentena y productos dados de baja. Los costos registrados
+como cero siguen siendo cero: comprueba tus datos de importación.
+La búsqueda y los filtros no cambian este total del catálogo completo.
+En el mostrador requiere permiso de consultar costos. En Dirección se suman
+los locales seleccionados y se muestra la última información sincronizada.
+Una sucursal desactualizada se indica como pendiente, sin inventar un valor.
+
+INSTALAR O ACTUALIZAR LA APLICACIÓN
+1. Antes de actualizar, exporta un respaldo completo y guárdalo fuera del equipo.
+2. Cierra LunaDev POS y ejecuta Instalar-LunaDevPOS-ValorInventario.exe.
+3. El instalador actualiza el programa conservando los datos de la instalación.
+   En un equipo nuevo comienza vacío: configura el negocio e importa inventario.
+4. Abre Inventario con una cuenta que pueda consultar costos para ver el importe.
+Requisitos: Windows 10/11 de 64 bits. No requiere instalar Python.
+No ejecutes una reinstalación limpia para actualizar un negocio con datos.
+
+ACTUALIZAR UNA PÁGINA YA PUBLICADA
+1. Conserva una copia de toda tu carpeta ORIGINAL del asistente configurado.
+2. Copia desde Kit-Pagina-LunaDevPOS los archivos de código (worker.js,
+   domain.js, reporting.js, retention.js, exports.js) y la carpeta public
+   a esa carpeta original, reemplazando las versiones anteriores.
+3. Conserva CONFIGURADO.json, wrangler.json, DATOS-PRIVADOS-DEL-DUENO.txt
+   y .config-cloudflare de tu configuración original. No los sustituyas.
+4. Ejecuta Actualizar-pagina.cmd desde esa carpeta configurada original.
+   No ejecutes Crear-pagina.cmd para actualizar un sitio existente.
+5. Recarga la página del administrador y espera la sincronización del POS.
+Para una publicación nueva usa Crear-pagina.cmd en una copia nueva del kit;
+consulta el Manual-LunaDevPOS.html incluido para todos los pasos.
+
+El kit distribuido no contiene cuentas, contraseñas, inventario ni ventas reales.
+La valoración es de mercancía vendible, no una tasación de todo el negocio.

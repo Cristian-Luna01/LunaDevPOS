@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS history_days(branch_id TEXT NOT NULL REFERENCES branches(id),day TEXT NOT NULL,revision INTEGER NOT NULL,fingerprint TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(branch_id,day));

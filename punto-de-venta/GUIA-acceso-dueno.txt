@@ -1,0 +1,30 @@
+ACCESO DEL DUEÑO DESDE DATOS MÓVILES — PRUEBA GRATUITA
+
+Requisitos: computadora del local encendida con el programa abierto y acceso a internet; teléfono con navegador y datos móviles; correo del dueño al que pueda llegar un código; cuenta de Dirección con permisos de administrar usuarios y consultar informes.
+
+1. En el mostrador, entra con una cuenta administradora. Si aparece la pantalla de turno, puedes elegir Administración para configurar antes de abrir un turno.
+2. Menú > Configuración > Acceso del dueño · Prueba gratuita.
+3. Escribe el correo del dueño y pulsa Activar acceso desde internet. Este correo se comunica a Cloudflare para restringir el acceso.
+4. Espera a que aparezca Conectado y copia el enlace.
+5. Abre ese enlace en el teléfono usando datos móviles. Cloudflare pedirá verificar el correo con un código. Después entra con el usuario y contraseña de Dirección de la farmacia.
+6. Consulta ventas y caja, inventario, historial, métricas y reposición. El resumen se actualiza cada 10 segundos mientras la página está visible. Este acceso es solo de consulta: no permite editar datos, cobrar, modificar usuarios ni descargar respaldos del punto de venta.
+7. Desactivar acceso termina el enlace. Cerrar el programa también lo termina. Al volver a activarlo, se genera otro enlace. No se activa automáticamente al iniciar el programa.
+
+No hace falta comprar alojamiento, dominio o una Raspberry Pi para esta prueba. Se incluye el conector oficial cloudflared 2026.10.0, verificado con el checksum publicado por Cloudflare. No se abre un puerto de entrada del router: el conector se conecta hacia Cloudflare y el punto de venta sigue escuchando solo en la propia computadora.
+
+Este es un enlace temporal de pruebas. Cloudflare no garantiza disponibilidad de Quick Tunnels y cambia el nombre del enlace al volver a crearlo. Para un despliegue definitivo y enlace estable habrá que seleccionar otra configuración.
+
+No se usa Netlify: la computadora entrega la página de Dirección y sus datos a través del enlace protegido. Subir únicamente los archivos de la página a Netlify no conectaría esa página con la base local.
+
+Esta versión todavía no guarda información para consulta sin conexión en el teléfono. Si el programa se apaga, no podrás hacer consultas nuevas. La aplicación móvil con almacenamiento local sigue siendo un trabajo posterior.
+
+Pruebas realizadas: 107 pruebas del programa, incluidas pruebas de autenticación, restricción de correo único, ciclo de activación/desactivación, cookie protegida, bloqueo de acceso anónimo y de vendedores y bloqueo de escrituras y rutas del mostrador desde el acceso remoto. Con una base ficticia vacía, el conector se registró y un navegador externo mostró el formulario de correo de Cloudflare. No se envió ningún código ni se utilizaron datos reales. La verificación de correo y la consulta con la cuenta real se deben completar al probar desde tu teléfono.
+
+Referencia: https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/
+
+ACLARACION DE ACCESO
+En esta instalacion la cuenta del programa es admin. El correo del enlace se usa para la verificacion de Cloudflare, no reemplaza el usuario del programa.
+Si el enlace devuelve Unauthorized sin datos, vuelve a abrirlo y repite la verificacion. Hay un fallo publico reportado en Cloudflare (sesion de correo que expira a los pocos segundos): https://github.com/cloudflare/cloudflared/issues/1752 . No se garantiza que renovar la verificacion resuelva ese fallo externo.
+
+PERSONALIZACION
+Una instalacion nueva comienza sin inventario, clientes ni logo. El primer inicio solicita nombre del negocio y cuenta de administrador. En Menu > Configuracion puedes cambiar nombre, cargar/quitar logo PNG y cambiar el mensaje del ticket. Mostrador y Direccion usan esos mismos datos. Actualizar conserva los datos de tu instalacion; no inicia otra base vacia.

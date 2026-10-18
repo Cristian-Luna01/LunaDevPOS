@@ -1,0 +1,21 @@
+Nuvaria POS — Escritorio — Versión de prueba
+
+Esta versión abre únicamente el mostrador dentro del propio programa, sin pestañas ni barra Programa. La página de Dirección se conserva por separado para el dueño. No abre Chrome, Edge, Brave ni el navegador predeterminado. Incluye Python, Qt y el motor de visualización. La interfaz sigue aprovechando HTML y JavaScript, pero funciona en una ventana integrada del programa.
+
+Instala con Instalar-NuvariaPOS-Escritorio.exe. Crea la cuenta administradora en el primer inicio. Usa datos nuevos y separados en %LOCALAPPDATA%\NuvariaPOSEscritorioPrueba\data. No incluye ventas ni inventario de otras instalaciones.
+
+Para cerrar: termina todos los turnos en Caja y corte y después cierra la ventana. Si hay turnos abiertos, la ventana permanece abierta y vuelve al mostrador. Para un turno pendiente tras un cierre forzado, presiona Ctrl + Shift + R. Debes identificarte con la cuenta propietaria del turno o una cuenta con permiso de administración de usuarios, y registrar el efectivo que realmente contaste. No se inventan conteos ni se borran ventas. Esta opción no constituye un cierre automático ni garantiza recibir un cierre final ante un apagón.
+
+Las exportaciones y respaldos se guardan mediante una ventana de selección de archivo. La impresión de tickets utiliza el diálogo de impresión del programa. Debes comprobar la impresora real en la farmacia.
+
+La página de Dirección sigue en el proyecto original. Esta entrega todavía no configura acceso desde internet o desde el teléfono.
+
+Esta versión es de 64 bits. Falta medir rendimiento y verificar funcionamiento en la computadora antigua Windows 10 de la farmacia. Incluir el motor aumenta considerablemente el tamaño frente al instalador anterior. El instalador no está firmado digitalmente.
+
+Consulta COMO-RETIRAR-VERSION-ANTERIOR.txt para quitar la primera entrega. Tu proyecto original permanece intacto.
+
+Qt/PySide6 se distribuyen como bibliotecas separadas. Las licencias están incluidas en la carpeta licenses del programa. Información y código fuente del proyecto Qt: https://code.qt.io/ y https://www.qt.io/qt-for-python. La versión empaquetada utiliza PySide6 6.12.0 y Qt WebEngine del mismo paquete; consulta las licencias incluidas para los componentes de terceros.
+
+Actualización: cierra todos los turnos y el programa antes de ejecutar el instalador nuevo. La actualización reemplaza los archivos del programa y conserva la base de datos separada.
+
+Mantenimiento: Administración > Mantenimiento reúne las opciones de inventario y respaldo completo. Para recuperar clientes, deudas, abonos, cuentas, credenciales protegidas, permisos y todo el historial, exporta el respaldo completo (.botica.json). Un CSV de inventario no incluye esa información. Cierra los turnos antes del mantenimiento y guarda el respaldo fuera de la computadora. En una instalación nueva, crea la cuenta inicial y restaura antes de cargar productos o abrir turnos. Tras restaurar, entra con las cuentas y contraseñas del respaldo. Las sesiones abiertas se descartan.
