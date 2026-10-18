@@ -6,6 +6,8 @@ Punto de venta de escritorio para Windows, con inventario local, caja y consulta
 
 ## Descargar e instalar
 
+[Ver versiones e instaladores](https://github.com/Cristian-Luna01/LunaDevPOS/releases)
+
 El instalador y el paquete con asistente y manual se distribuyen en **Releases**. Descarga el ZIP completo y comienza con `EMPIEZA-AQUI.txt`. En Windows 10/11 de 64 bits el instalador incluye el motor necesario; la computadora de caja no necesita Python ni Node.js.
 
 Antes de actualizar una instalación existente, exporta un respaldo completo fuera de la computadora. La actualización conserva datos; una instalación nueva empieza sin inventario ni usuarios del negocio.
