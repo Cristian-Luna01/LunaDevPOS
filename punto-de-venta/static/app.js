@@ -80,6 +80,7 @@ async function checkCartStock(){
   if(changed){pendingSale=null;renderCart();notify('Cambió la existencia o el precio. Actualizamos la venta; revisa la venta antes de cobrar.');}
   return !changed;
 }
+function resetCheckoutCustomer(){customerVersion++;$('customer').value='';$('customerSearch').value='';$('customerResults').hidden=true;$('customerResults').replaceChildren();}
 function customer(){return customers.find(c=>c.id===Number($('customer').value));}
 function promotionLabel(p){const offer=p.promotion;return offer?`${offer.bundle_quantity} por ${money(offer.price_cents)} · Promoción`:money(p.price_cents)+' / unidad';}
 function promotionTotal(p,qty){const offer=p.promotion;return offer?Math.min(p.price_cents*qty,Math.floor(qty/offer.bundle_quantity)*offer.price_cents+(qty%offer.bundle_quantity)*p.price_cents):p.price_cents*qty;}
@@ -131,7 +132,7 @@ $('pay').onclick=act(async()=>{
   const payments=on_account||paymentTotal===0?[]:[{method:d.method,amount_cents:paymentTotal,...(d.method==='cash'?{tendered_cents:cents(d.received)}:{})}];
   const body={on_account,customer_id:on_account?Number(d.credit_customer):customer()?.id||null,items:cart.map(l=>({product_id:l.product.id,quantity:l.quantity,...(l.prescription?{prescription:l.prescription}:{})})),payments};
   const signature=JSON.stringify(body);if(!pendingSale||pendingSale.signature!==signature)pendingSale={signature,key:crypto.randomUUID()};
-  const ticket=await api('/sales',{...body,request_key:pendingSale.key});cart=[];pendingSale=null;renderCart();clearCheckoutSearch();renderReceipt(ticket);notify(`Ticket #${ticket.id} ${on_account?'registrado a crédito':'confirmado · Cambio '+money(ticket.change_cents)}`);await searchProducts();
+  const ticket=await api('/sales',{...body,request_key:pendingSale.key});cart=[];pendingSale=null;resetCheckoutCustomer();renderCart();clearCheckoutSearch();renderReceipt(ticket);notify(`Ticket #${ticket.id} ${on_account?'registrado a crédito':'confirmado · Cambio '+money(ticket.change_cents)}`);await searchProducts();
  },'Confirmar venta');
  $('changePreview').hidden=false;
  const form=$('dialogForm');

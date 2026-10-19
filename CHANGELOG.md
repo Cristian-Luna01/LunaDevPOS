@@ -2,6 +2,8 @@
 
 ## Cambios preparados — 2026-10-18
 
+- Al confirmar una venta, el cliente vuelve a Público general para impedir que la siguiente compra herede descuentos. Si el cobro falla, se conserva el cliente para reintentar.
+
 - Historial de tickets del mostrador, junto al turno, con fechas y detalle de la compra original.
 - Consulta paginada y permisos coherentes con la consulta de tickets existente.
 - Botón para limpiar el buscador; limpieza al enfocarlo y después de cobrar.

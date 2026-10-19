@@ -61,3 +61,23 @@ test('escritura manual pausada dentro del buscador no se borra al escribir',()=>
  }
  assert.equal(s.input.value,'paracetamol');assert.equal(s.lookups.length,0);
 });
+
+test('venta confirmada restablece Público general y no hereda el descuento',async()=>{
+ const nodes={customer:{value:'7'},customerSearch:{value:'Cristian'},customerResults:{hidden:false,replaceChildren(){this.empty=true;}}};
+ const state={$:id=>nodes[id],customerVersion:3,customers:[{id:7,discount_bps:1000}],cart:[{product:{price_cents:10000},quantity:1}],pendingSale:{key:'qa'},body:{customer_id:7},on_account:false,renderCart(){},clearCheckoutSearch(){},renderReceipt(){},notify(){},money:String,searchProducts:async()=>{},api:async()=>({id:1,change_cents:0}),promotionTotal:(p,q)=>p.price_cents*q};
+ vm.runInNewContext(source.slice(source.indexOf('function resetCheckoutCustomer'),source.indexOf('function promotionLabel')),state);
+ vm.runInNewContext(source.slice(source.indexOf('function totals()'),source.indexOf('function renderCart()')),state);
+ assert.equal(vm.runInNewContext('totals().total',state),9000);
+ const line=source.slice(source.indexOf("const ticket=await api('/sales'"),source.indexOf("\n },'Confirmar venta');"));
+ await vm.runInNewContext('(async()=>{'+line+'})()',state);
+ assert.equal(nodes.customer.value,'');assert.equal(nodes.customerSearch.value,'');assert.equal(nodes.customerResults.hidden,true);assert.equal(nodes.customerResults.empty,true);
+ state.cart=[{product:{price_cents:10000},quantity:1}];assert.equal(vm.runInNewContext('totals().total',state),10000);
+});
+
+test('cobro fallido conserva el cliente para reintentar',async()=>{
+ const selected={value:'7'};let reset=false;
+ const state={$:()=>selected,body:{customer_id:7},pendingSale:{key:'qa'},api:async()=>{throw Error('No guardado');},resetCheckoutCustomer(){reset=true;}};
+ const line=source.slice(source.indexOf("const ticket=await api('/sales'"),source.indexOf("\n },'Confirmar venta');"));
+ await assert.rejects(vm.runInNewContext('(async()=>{'+line+'})()',state),/No guardado/);
+ assert.equal(selected.value,'7');assert.equal(reset,false);
+});

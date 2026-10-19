@@ -16,3 +16,5 @@ Termina el turno, exporta un respaldo completo fuera de la computadora y cierra 
 Solo cambia el mostrador y sus consultas locales. No hace falta volver a publicar la página del administrador.
 
 Validación: 207 pruebas Python y 22 pruebas JavaScript aprobadas. Se comprobó visualmente una venta de tres unidades, el pago con cambio, la limpieza del buscador, la consulta del ticket y un día sin tickets. Los escáneres físicos siguen requiriendo el piloto en el equipo real.
+
+Después de guardar una venta, el cliente vuelve automáticamente a Público general y se vacía su búsqueda. Si el guardado falla, se conserva el cliente para reintentar. Se verificó que una segunda compra no herede el descuento anterior.
