@@ -58,7 +58,7 @@ Para una publicación nueva usa `Crear-pagina.cmd`. Para actualizar un servicio 
 
 ## Calidad y límites conocidos
 
-La última comprobación local aprobó 207 pruebas Python y 22 pruebas de interfaz/servicio central. La simulación acelerada de 183 días comprobó 14,640 compras con 749,726 comparaciones independientes sin discrepancias observadas. Estos resultados no garantizan ausencia de errores futuros ni sustituyen el piloto en el equipo real.
+La última comprobación local aprobó 211 pruebas Python y 22 pruebas de interfaz/servicio central. La simulación acelerada de 183 días comprobó 14,640 compras con 749,726 comparaciones independientes sin discrepancias observadas. Estos resultados no garantizan ausencia de errores futuros ni sustituyen el piloto en el equipo real.
 
 - Facturación: entorno de pruebas; la emisión fiscal real no está habilitada como una función lista para producción.
 - Las devoluciones de ventas a crédito están bloqueadas y requieren resolver la deuda mediante un procedimiento específico.
@@ -73,3 +73,5 @@ La última comprobación local aprobó 207 pruebas Python y 22 pruebas de interf
 No se incluyen bases de datos, cuentas reales, claves, dependencias ni compilaciones. El binario `cloudflared.exe` se obtiene de su fuente oficial mediante `herramientas/Preparar-conector.ps1`; su procedencia y licencia están en `punto-de-venta/vendor`. Se requiere para las pruebas del ciclo del conector remoto. Para recompilar el instalador se debe generar el payload `programa.zip`, que no está versionado.
 
 Consulta [el manual](docs/Manual-LunaDevPOS.html), [cómo contribuir](CONTRIBUTING.md) y [manejo de seguridad](SECURITY.md). No se ha otorgado una licencia de código abierto ni autorización general de reutilización comercial.
+
+La rama de optimización incluye [mediciones, alcance y guía de actualización](docs/optimizacion-equipos-basicos.md), con respaldo previo en GitHub.

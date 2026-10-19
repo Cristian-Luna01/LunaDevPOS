@@ -7,7 +7,7 @@ test('Inventario central conserva costos de lote por sucursal y suma todos sin f
  const source=readFileSync(new URL('../public/direccion/panel.js',import.meta.url),'utf8');
  const render=source.slice(source.indexOf('function render(){'),source.indexOf('async function update(){'));
  const nodes=new Map(),$=id=>{if(!nodes.has(id))nodes.set(id,{value:'A',classList:{toggle(){}},setAttribute(){}});return nodes.get(id)};
- const context={$,rows:summary([a,b],'Admin').products,filter:'all',limit:100,money:c=>String(c),esc:String};vm.createContext(context);vm.runInContext(render+';render();',context);
+ const context={$,directionHTML:(node,markup)=>{node.innerHTML=markup;},rows:summary([a,b],'Admin').products,filter:'all',limit:100,money:c=>String(c),esc:String};vm.createContext(context);vm.runInContext(render+';render();',context);
  assert.match($('directionInventoryValue').textContent,/4200/);
  context.rows=[{...context.rows[0],inventory_value_cents:undefined}];vm.runInContext('render()',context);assert.match($('directionInventoryValue').textContent,/pendiente/);
 });

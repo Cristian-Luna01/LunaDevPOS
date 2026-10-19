@@ -65,6 +65,8 @@ class POS:
         if Path(self.path).exists():
             from migrations import upgrade
             upgrade(self.path, PERMISSIONS)
+            from performance_indexes import install
+            install(self.path)
 
     @contextlib.contextmanager
     def db(self, write=False):

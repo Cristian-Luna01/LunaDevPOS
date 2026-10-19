@@ -36,7 +36,8 @@ def history(db,data,include_profit=False):
         WHERE date(r.created_at,'localtime') BETWEEN ? AND ?
         ORDER BY happened_at,ticket_id,item_id''',(*args,*args))]
     from cash_basis import collections
-    events.extend(collections(db,*args))
+    collection_entries=collections(db,*args)
+    events.extend(collection_entries)
     events.sort(key=lambda e:(e['happened_at'],e['ticket_id'],e['item_id'],e['collection_id'] or 0))
     daily={}
     for n in range((end-start).days+1):
@@ -78,7 +79,7 @@ def history(db,data,include_profit=False):
     result={'from':args[0],'to':args[1],'daily':days,'products':sorted(products.values(),key=lambda p:(-p['sold_units'],p['name'])),'events':events,'totals':totals,'cash_movements':cash_movements,'cash_totals':cash_totals}
     if include_profit:
         from profit import add_history
-        add_history(db,result)
+        add_history(db,result,collection_entries=collection_entries)
     from card_fees import add_history as add_fees
     add_fees(db,result)
     return result

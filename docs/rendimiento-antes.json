@@ -1,0 +1,20 @@
+{
+  "search": {
+    "median_ms": 3.886
+  },
+  "search_sha256": "7687e972db3c2836a09f7d0f67c7d0898fd804599bd8384bd6f3281d656458d2",
+  "fixture": {
+    "products": 2000,
+    "batches": 10000,
+    "sales": 180,
+    "audit_rows": 12000
+  },
+  "snapshot": {
+    "median_ms": 2943.933
+  },
+  "fingerprints": {
+    "median_ms": 53.957,
+    "peak_bytes": 6706412
+  },
+  "result_sha256": "c2783a1bb80a0f7664c7d2f4cf0c3f03b62309046708f4ee14201d9b60772895"
+}

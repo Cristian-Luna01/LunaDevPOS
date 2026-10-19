@@ -305,15 +305,8 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/products':
                 q = data.get('q','')[:100]
                 offset = max(0,int(data.get('offset','0')))
-                columns = 'p.id,p.barcode,p.name,p.generic_name,p.category_id,p.price_cents,p.tax_bps,p.min_stock,p.max_stock,p.reorder_point,p.requires_prescription'
-                if 'costs.view' in permissions:
-                    columns += ',p.cost_cents'
-                # Búsqueda acotada. LIKE contiene es fallback para catálogos modestos.
-                rows = db.execute(f'''SELECT {columns},COALESCE(b.stock,0) stock,COALESCE(b.physical_stock,0) physical_stock FROM products p
-                    LEFT JOIN (SELECT product_id,SUM(CASE WHEN expires_on IS NULL OR expires_on>? THEN quantity ELSE 0 END) stock,SUM(quantity) physical_stock FROM batches GROUP BY product_id) b ON b.product_id=p.id
-                    WHERE p.active=1 AND (p.barcode=? OR p.name LIKE ? OR p.generic_name LIKE ?) ORDER BY (p.barcode=?) DESC,p.name LIMIT 40 OFFSET ?''',
-                    (dt.date.today().isoformat(),q,'%'+q+'%','%'+q+'%',q,offset))
-                result = [dict(r) for r in rows]
+                from catalog_search import search
+                result=search(db,q,offset,'costs.view' in permissions)
                 active=promotions.active(db)
                 for p in result:promotions.decorate(p,active.get(p['id']))
                 if 'costs.view' in permissions:

@@ -50,11 +50,10 @@ def snapshot(pos):
     today = dt.date.today()
     with pos.request_lock, pos.db() as db:
         report = analytics.history(db, {'from': (today-dt.timedelta(days=30)).isoformat(), 'to': today.isoformat()}, True)
-        products = [dict(r) for r in db.execute('''SELECT p.id,p.barcode,p.name,p.price_cents,p.cost_cents,p.reorder_point,
-            COALESCE(SUM(CASE WHEN b.expires_on IS NULL OR b.expires_on>? THEN b.quantity ELSE 0 END),0) stock,
-            COALESCE(SUM(b.quantity),0) physical_stock FROM products p LEFT JOIN batches b ON b.product_id=p.id
-            WHERE p.active=1 GROUP BY p.id ORDER BY p.id''',(today.isoformat(),))]
         direction=direction_replica.current(pos,db)
+        # Reutiliza el mismo catálogo ya calculado, conservando el formato público.
+        fields=('id','barcode','name','price_cents','cost_cents','reorder_point','stock','physical_stock')
+        products=[{key:p[key] for key in fields} for p in sorted(direction['products'],key=lambda p:p['id'])]
     return {'version': 2, 'currency': 'MXN', 'generated_at': dt.datetime.now(dt.timezone.utc).isoformat(),
             'today': today.isoformat(), 'daily': report['daily'], 'products': products,'direction':direction}
 

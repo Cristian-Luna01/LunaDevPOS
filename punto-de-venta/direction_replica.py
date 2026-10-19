@@ -56,16 +56,25 @@ def day_fingerprint(db,day):
     return hashlib.sha256(json.dumps(values,sort_keys=True).encode()).hexdigest()
 
 def history_fingerprints(db,days):
-    """Una lectura por tabla, en lugar de recorrer todo el histórico por cada fecha."""
+    """Mismas huellas, sin retener todas las filas del histórico en memoria."""
     import hashlib
     references=reference_fingerprint(db)
-    groups={day:[[],[],[],[],[],[],references] for day in days}
-    for index,table in enumerate(('sales','returns','customer_ledger','cash_movements','card_fees','audit_log')):
+    hashes={day:hashlib.sha256(b'[') for day in days}
+    for table in ('sales','returns','customer_ledger','cash_movements','card_fees','audit_log'):
+        for digest in hashes.values():digest.update(b'[')
+        populated=set()
         condition=" WHERE action IN ('inventory.product_count','product.price_change')" if table=='audit_log' else ''
         for row in db.execute(f"SELECT *,date(created_at,'localtime') AS fingerprint_day FROM {table}{condition} ORDER BY id"):
             data=dict(row);day=data.pop('fingerprint_day')
-            if day in groups:groups[day][index].append(data)
-    return {day:hashlib.sha256(json.dumps(values,sort_keys=True).encode()).hexdigest() for day,values in groups.items()}
+            digest=hashes.get(day)
+            if digest is None:continue
+            if day in populated:digest.update(b', ')
+            populated.add(day)
+            digest.update(json.dumps(data,sort_keys=True).encode())
+        for digest in hashes.values():digest.update(b'], ')
+    for digest in hashes.values():digest.update(json.dumps(references).encode()+b']')
+    return {day:digest.hexdigest() for day,digest in hashes.items()}
+
 
 def reference_fingerprint(db):
     import hashlib

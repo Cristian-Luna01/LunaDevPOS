@@ -2,6 +2,8 @@
 
 ## Cambios preparados — 2026-10-18
 
+- Optimización de consultas de inventario, sincronización, memoria del histórico y actualización de tarjetas de Dirección; mediciones y validación en docs/optimizacion-equipos-basicos.md.
+
 - Al confirmar una venta, el cliente vuelve a Público general para impedir que la siguiente compra herede descuentos. Si el cobro falla, se conserva el cliente para reintentar.
 
 - Historial de tickets del mostrador, junto al turno, con fechas y detalle de la compra original.

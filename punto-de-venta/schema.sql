@@ -121,4 +121,8 @@ CREATE TABLE IF NOT EXISTS promotions(
 CREATE TABLE IF NOT EXISTS business_branding(id INTEGER PRIMARY KEY CHECK(id=1),png_base64 TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS business_settings(id INTEGER PRIMARY KEY CHECK(id=1),name TEXT NOT NULL,receipt_footer TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS customer_ledger(id INTEGER PRIMARY KEY,customer_id INTEGER NOT NULL REFERENCES customers(id),sale_id INTEGER UNIQUE REFERENCES sales(id),shift_id INTEGER NOT NULL REFERENCES cash_shifts(id),user_id INTEGER NOT NULL REFERENCES users(id),amount_cents INTEGER NOT NULL CHECK(amount_cents!=0),method TEXT CHECK(method IN ('cash','debit','transfer')),request_key TEXT UNIQUE,request_hash TEXT,created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')));
+CREATE INDEX IF NOT EXISTS batches_product_received ON batches(product_id,received_at DESC,id DESC);
+CREATE INDEX IF NOT EXISTS returns_sale ON returns(sale_id);
+CREATE INDEX IF NOT EXISTS return_items_sale_item ON return_items(sale_item_id);
+CREATE INDEX IF NOT EXISTS return_allocations_item ON return_allocations(return_item_id);
 PRAGMA user_version=10;
