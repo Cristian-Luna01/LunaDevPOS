@@ -1,5 +1,5 @@
 """Compilación oficial Windows x64: entorno fijado y tres recetas vigentes."""
-import argparse,hashlib,importlib.metadata as metadata,json,os,shutil,subprocess,sys,zipfile
+import argparse,hashlib,importlib.metadata as metadata,json,os,shutil,ssl,subprocess,sys,zipfile
 from pathlib import Path
 root=Path(__file__).resolve().parent.parent;source=root/'punto-de-venta'
 parser=argparse.ArgumentParser();parser.add_argument('--output',default=str(root/'dist'));args=parser.parse_args();output=Path(args.output).resolve();output.mkdir(parents=True,exist_ok=True)
@@ -13,6 +13,10 @@ def build(spec,dist,work):
 build('LunaDevPOS.spec',output/'native',output/'work/native')
 build('Desinstalar-LunaDevPOS.spec',output/'uninstaller',output/'work/uninstaller')
 program=output/'native/LunaDevPOS';shutil.copy2(output/'uninstaller/Desinstalar-LunaDevPOS.exe',program/'Desinstalar-LunaDevPOS.exe')
+# Algunos runtimes añaden una lista de certificados rechazados al módulo ssl.
+# Es un recurso público del motor, no una clave del negocio.
+runtime_ca=Path(ssl.__file__).with_name('codex-rejected-cas.pem')
+if runtime_ca.is_file():shutil.copy2(runtime_ca,program/'_internal'/runtime_ca.name)
 shutil.copy2(program/'LunaDevPOS.exe',program/'NuvariaPOSEscritorio.exe')
 licenses=program/'licenses';licenses.mkdir(exist_ok=True)
 components=[]

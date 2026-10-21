@@ -20,6 +20,7 @@ Fecha: 21 de octubre de 2026. Comparación con la rama de respaldo `respaldo/ant
 - 16 pruebas de interfaz aprobadas, incluyendo 3,000 combinaciones de descuento/promoción, limpieza del cliente, lector y recuperación.
 - 16 pruebas del panel central aprobadas: múltiples locales, métricas, exportaciones, retención y transferencia fragmentada.
 - Comprobación HTTP y navegador aislada: se interrumpió deliberadamente la respuesta después de guardar una venta. Al reabrir se recuperó la operación; la base conservó exactamente una venta y una partida, con la comprobación reconocida.
+- Comprobación del ejecutable: motor Qt WebEngine y autoprueba con base nueva aprobados fuera del aislamiento de red. Se corrigió la inclusión de un recurso público de certificados requerido por el runtime de compilación. La instalación se comprueba en una carpeta temporal, conservando intacta la instalación del negocio.
 
 Los conteos describen casos automatizados, no un porcentaje de fiabilidad estadística. No equivalen a una garantía de ausencia de errores.
 
