@@ -11,7 +11,7 @@ IMPORT_TABLE = '''CREATE TABLE IF NOT EXISTS inventory_imports(
  user_id INTEGER NOT NULL REFERENCES users(id),result_json TEXT NOT NULL,
  created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')))'''
 
-def upgrade(path, permissions):
+def upgrade_legacy(path, permissions):
     with contextlib.closing(sqlite3.connect(path, timeout=10, isolation_level=None)) as db:
         if not db.execute("SELECT 1 FROM sqlite_master WHERE name='products'").fetchone():
             return
@@ -101,3 +101,21 @@ def upgrade(path, permissions):
         except Exception:
             db.rollback()
             raise
+
+
+def upgrade(path,permissions):
+    with contextlib.closing(sqlite3.connect(path)) as db:
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='products'").fetchone():return
+        version=db.execute('PRAGMA user_version').fetchone()[0]
+        if version>11:raise RuntimeError('Esta base requiere una versión más reciente de LunaDev POS')
+    if version<10:upgrade_legacy(path,permissions)
+    if version<11:
+        with contextlib.closing(sqlite3.connect(path,timeout=10)) as db:
+            with contextlib.closing(sqlite3.connect(str(path)+'.antes-v11-'+secrets.token_hex(4)+'.sqlite3')) as copy:
+                db.backup(copy)
+                if copy.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise RuntimeError('Respaldo de migración no válido')
+            with db:
+                db.execute("CREATE TABLE IF NOT EXISTS operation_requests(kind TEXT NOT NULL,user_id INTEGER NOT NULL REFERENCES users(id),request_key TEXT NOT NULL,request_hash TEXT NOT NULL,result_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),PRIMARY KEY(kind,user_id,request_key))")
+                from operation_journal import TABLE
+                db.execute(TABLE)
+                db.execute('PRAGMA user_version=11')

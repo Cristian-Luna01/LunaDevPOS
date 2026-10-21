@@ -44,7 +44,7 @@ class StartupAuditTest(unittest.TestCase):
  def test_migrations_empty_future_and_inconsistent_relations(self):
   empty=self.root/'empty.sqlite3';sqlite3.connect(empty).close();migrations.upgrade(empty,core.PERMISSIONS)
   self.pos.initialize('qa','test-password')
-  with self.pos.db(True) as db:db.execute('PRAGMA user_version=11')
+  with self.pos.db(True) as db:db.execute('PRAGMA user_version=12')
   with self.assertRaises(RuntimeError):migrations.upgrade(self.db,core.PERMISSIONS)
   with contextlib.closing(sqlite3.connect(self.db)) as db:
    db.execute('PRAGMA user_version=6');db.execute("INSERT INTO products(barcode,name,category_id,cost_cents,price_cents) VALUES ('BROKEN','Broken',999,0,1)");db.commit()

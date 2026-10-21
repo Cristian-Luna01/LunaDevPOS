@@ -50,7 +50,7 @@ class PerformanceTest(unittest.TestCase):
   POS(self.pos.path)
   install(self.pos.path)
   with self.pos.db() as db:
-   self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],10)
+   self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],11)
    self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
    self.assertIn('batches_product_received',{r[1] for r in db.execute('PRAGMA index_list(batches)')})
    self.assertEqual([r for r in db.iterdump() if not r.startswith('CREATE INDEX')],[r for r in original if not r.startswith('CREATE INDEX')])

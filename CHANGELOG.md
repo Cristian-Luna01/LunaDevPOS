@@ -1,5 +1,16 @@
 # Historial de versiones
 
+## 0.2.0-rc.1 — 2026-10-21
+
+- Historial general protegido por el permiso de reportes, conservando la consulta de tickets propios.
+- Lectura y entrega HTTP fuera del bloqueo de operaciones, con límites de tiempo y tamaño.
+- Recuperación persistente de operaciones inciertas, reintentos sin duplicados y cancelación comprobada.
+- Cortes cerrados conservan su resultado y datos originales.
+- Sincronización de documentos grandes por bloques, reanudación y almacenamiento fragmentado.
+- Copia automática adicional en una carpeta configurable, con verificación y aviso de fallo.
+- Consultas de fechas indexables, dependencias fijadas, receta de compilación y pruebas automáticas.
+- Migración aditiva al esquema 11; los respaldos completos conservan el registro de recuperación.
+
 ## Cambios preparados — 2026-10-18
 
 - Optimización de consultas de inventario, sincronización, memoria del histórico y actualización de tarjetas de Dirección; mediciones y validación en docs/optimizacion-equipos-basicos.md.

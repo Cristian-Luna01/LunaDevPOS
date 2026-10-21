@@ -5,6 +5,10 @@ import json
 import sqlite3
 import threading
 import uuid
+import hashlib
+import base64
+import time
+from urllib.error import HTTPError
 from pathlib import Path
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
 from urllib.parse import urlsplit
@@ -68,6 +72,7 @@ class BranchSync:
         self.thread = None
         self.cached = None
         self.signature = None
+        self.failed_days = {}
         self.message = 'Sin vincular a una cuenta del dueño.'
         with database(self.path) as db:
             db.execute('CREATE TABLE IF NOT EXISTS link(id INTEGER PRIMARY KEY CHECK(id=1),url TEXT NOT NULL,token TEXT NOT NULL,name TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,last_ok TEXT)')
@@ -75,6 +80,7 @@ class BranchSync:
             db.execute('INSERT OR IGNORE INTO installation VALUES(1,?)',(uuid.uuid4().hex,))
             self.identity=db.execute('SELECT identity FROM installation').fetchone()[0]
             db.execute('CREATE TABLE IF NOT EXISTS sent_days(day TEXT PRIMARY KEY,fingerprint TEXT NOT NULL)')
+            db.execute('CREATE TABLE IF NOT EXISTS outbox(target TEXT NOT NULL,route TEXT NOT NULL,body BLOB NOT NULL,next_part INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(target,route))')
 
     def status(self):
         with self.lock, database(self.path) as db:
@@ -102,6 +108,7 @@ class BranchSync:
         with self.lock, database(self.path) as db:
             db.execute('DELETE FROM link')
             db.execute('DELETE FROM sent_days')
+            db.execute('DELETE FROM outbox')
         self.message = 'Desvinculado. Las ventas y el inventario permanecen en esta computadora.'
         return self.status()
 
@@ -126,21 +133,15 @@ class BranchSync:
         payload['generated_at']=dt.datetime.now(dt.timezone.utc).isoformat()
         payload.update(revision=revision, name=row[2],instance_id=self.identity)
         body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode()
-        if len(body) > 900_000:
-            raise Error('El catálogo supera el tamaño admitido por esta primera versión de conexión. No se envió un catálogo incompleto.')
-        if sender:
-            result = sender(row[0], reveal(row[1]), body)
-        else:
-            request = Request(row[0]+'/api/snapshot', data=body, headers={'Content-Type':'application/json', 'Authorization':'Bearer '+reveal(row[1]),'User-Agent':'NuvariaPOS/1.0 (Windows; branch reporting)'}, method='POST')
-            with build_opener(ProxyHandler({}), NoRedirect()).open(request, timeout=10) as response:
-                result = json.loads(response.read(4096))
+        result=self.send_payload(row[0],reveal(row[1]),body,'snapshot',sender)
         if result.get('revision') != revision or result.get('ok') is not True:
             raise Error('La página central no confirmó esta actualización')
         with self.lock, database(self.path) as db:
             db.execute('UPDATE link SET last_ok=? WHERE id=1 AND url=? AND token=?', (payload['generated_at'],row[0],row[1]))
         self.message = 'Conectado. Actualizando el historial completo…'
         remaining=self.sync_days(row,sender)
-        self.message = f'Conectado. Historial en proceso: faltan {remaining} fechas.' if remaining else 'Conectado. Panel e historial enviados a la página del dueño.'
+        if remaining and self.message.startswith('No se confirmó'):pass
+        else:self.message = f'Conectado. Historial en proceso: faltan {remaining} fechas.' if remaining else 'Conectado. Panel e historial enviados a la página del dueño.'
 
     def sync_days(self,link,sender=None):
         days=sorted(self.cached['direction']['history_days'],reverse=True)
@@ -148,7 +149,8 @@ class BranchSync:
         pending=[day for day in days if sent.get(day)!=self.cached['direction']['history_fingerprints'][day]]
         # El archivo histórico se envía por lotes cortos; no retrasa las siguientes
         # actualizaciones del mostrador cuando el negocio ya tiene años de ventas.
-        for day in pending[:8]:
+        candidates=[day for day in pending if self.failed_days.get(day,0)<=time.monotonic()]
+        for day in candidates[:8]:
             expected=self.cached['direction']['history_fingerprints'][day]
             if sent.get(day)==expected:continue
             with self.pos.request_lock,self.pos.db() as db:
@@ -163,18 +165,56 @@ class BranchSync:
                 revision=active[2]+1;store.execute('UPDATE link SET revision=? WHERE id=1',(revision,))
             payload={'version':2,'instance_id':self.identity,'revision':revision,'day':day,'fingerprint':fingerprint,'report':report}
             body=json.dumps(payload,ensure_ascii=False,separators=(',',':')).encode()
-            if len(body)>900_000:raise Error('El detalle de un día supera el tamaño de envío. No se envió información parcial.')
-            if sender:
-                result=sender(link[0],reveal(link[1]),body)
-            else:
-                request=Request(link[0]+'/api/history-day',data=body,headers={'Content-Type':'application/json','Authorization':'Bearer '+reveal(link[1]),'User-Agent':'NuvariaPOS/1.0 (Windows; branch reporting)'},method='POST')
-                with build_opener(ProxyHandler({}),NoRedirect()).open(request,timeout=10) as response:result=json.loads(response.read(4096))
+            try:result=self.send_payload(link[0],reveal(link[1]),body,'history-day:'+day,sender)
+            except Exception as error:
+                self.failed_days[day]=time.monotonic()+60
+                self.message=f'No se confirmó el historial del {day}. {error}'
+                continue
             if result.get('ok') is not True or result.get('revision')!=revision:raise Error('El historial no confirmó la actualización')
             with self.lock,database(self.path) as store:
                 active=store.execute('SELECT url,token FROM link WHERE id=1').fetchone()
                 if active!=link[:2]:return len(pending)
                 store.execute('INSERT INTO sent_days VALUES(?,?) ON CONFLICT(day) DO UPDATE SET fingerprint=excluded.fingerprint',(day,fingerprint))
-        return max(0,len(pending)-8)
+            self.failed_days.pop(day,None)
+        with database(self.path) as store:updated=dict(store.execute('SELECT day,fingerprint FROM sent_days'))
+        return sum(updated.get(day)!=self.cached['direction']['history_fingerprints'][day] for day in days)
+
+    def send_payload(self,url,token,body,route,sender=None):
+        if len(body)>16_000_000:raise Error('El documento supera 16 MB. Reduce el intervalo o revisa el catálogo; no se publicó información parcial.')
+        target=hashlib.sha256((url+'|'+token).encode()).hexdigest()
+        with database(self.path) as db:old=db.execute('SELECT body FROM outbox WHERE target=? AND route=?',(target,route)).fetchone()
+        if old and bytes(old[0])!=body:self._send_document(url,token,bytes(old[0]),route,target,sender)
+        return self._send_document(url,token,body,route,target,sender)
+
+    def _send_document(self,url,token,body,route,target,sender):
+        def send(endpoint,raw):
+            if sender:return sender(url,token,raw)
+            request=Request(url+'/api/'+endpoint,data=raw,headers={'Content-Type':'application/json','Authorization':'Bearer '+token,'User-Agent':'LunaDevPOS/1.0'},method='POST')
+            try:
+                with build_opener(ProxyHandler({}),NoRedirect()).open(request,timeout=20) as response:return json.loads(response.read(4096))
+            except HTTPError as e:
+                try:message=json.loads(e.read(4096)).get('error','')
+                except Exception:message=''
+                raise Error(f'Servidor HTTP {e.code}. '+(message or 'Actualiza la página central y comprueba la conexión.')) from None
+        if len(body)<=800_000:return send(route.split(':')[0],body)
+        with database(self.path) as db:
+            db.execute('INSERT OR IGNORE INTO outbox(target,route,body) VALUES(?,?,?)',(target,route,body))
+            cursor=db.execute('SELECT next_part FROM outbox WHERE target=? AND route=?',(target,route)).fetchone()[0]
+        pieces=[body[i:i+250000] for i in range(0,len(body),250000)];digest=hashlib.sha256(body).hexdigest()
+        result=None
+        for attempt in range(2):
+            for index in range(cursor,len(pieces)):
+                packet={'kind':route.split(':')[0],'part':index,'total':len(pieces),'digest':digest,'upload_id':digest,'data':base64.b64encode(pieces[index]).decode()}
+                result=send('transfer',json.dumps(packet,separators=(',',':')).encode())
+                if result.get('ok') is not True:raise Error('No se confirmó un bloque de sincronización')
+                if index<len(pieces)-1 and (result.get('part')!=index or result.get('complete') is not False):raise Error('Confirmación de bloque inválida')
+                with database(self.path) as db:db.execute('UPDATE outbox SET next_part=? WHERE target=? AND route=?',(index if index==len(pieces)-1 else index+1,target,route))
+            expected=json.loads(body)['revision']
+            if result and result.get('revision')==expected:
+                with database(self.path) as db:db.execute('DELETE FROM outbox WHERE target=? AND route=?',(target,route))
+                return result
+            cursor=0
+        raise Error('Faltan bloques. Se conservó el envío para reintentar sin publicar datos incompletos.')
 
     def start(self):
         if self.thread:
@@ -183,8 +223,8 @@ class BranchSync:
             while not self.closed.is_set():
                 try:
                     self.once()
-                except Exception:
-                    self.message = 'No se pudo sincronizar. El mostrador sigue funcionando; se reintentará automáticamente.'
+                except Exception as error:
+                    self.message = 'No se pudo sincronizar. '+(str(error) if isinstance(error,Error) else 'Comprueba internet y la página del dueño.')+' El mostrador sigue funcionando; se reintentará.'
                 self.wake.wait(15)
                 self.wake.clear()
         self.thread = threading.Thread(target=run, daemon=True)

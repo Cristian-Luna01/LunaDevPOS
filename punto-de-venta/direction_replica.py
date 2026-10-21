@@ -17,7 +17,7 @@ def current(pos,db):
     shifts=[]
     for s in db.execute("SELECT s.*,u.display_name FROM cash_shifts s JOIN users u ON u.id=s.user_id WHERE s.closed_at IS NULL OR date(s.closed_at,'localtime')=? ORDER BY s.id DESC",(today,)):
         r=pos.report(db,s['id'])
-        shifts.append({'id':s['id'],'user':s['display_name'],'closed_at':s['closed_at'],'sales_cents':r['net_sales_cents'],
+        shifts.append({'id':s['id'],'user':r.get('user_name',s['display_name']),'closed_at':s['closed_at'],'sales_cents':r['net_sales_cents'],
             'expected_cents':r['expected_cents'],'counted_cents':s['counted_cents'],'difference_cents':r.get('difference_cents'),
             'payments_by_method':{name:sum(r['sales_by_method'].get(m,0)+r['collections_by_method'].get(m,0)-r['refunds_by_method'].get(m,0) for m in methods) for name,methods in [('cash',('cash',)),('card',('debit','credit')),('transfer',('transfer',))]},**profit.shift(db,s['id'])})
     totals=analytics.history(db,{'from':today,'to':today},True)['totals']

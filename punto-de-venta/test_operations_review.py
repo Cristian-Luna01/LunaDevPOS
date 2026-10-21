@@ -20,7 +20,7 @@ class OperationsReviewTest(unittest.TestCase):
   with self.pos.db() as db:
    self.assertEqual(before,{table:db.execute('SELECT COUNT(*) FROM '+table).fetchone()[0] for table in before})
    self.assertEqual(stock,db.execute('SELECT SUM(quantity) FROM batches').fetchone()[0])
-  body={'request_key':'free-ticket','customer_id':cid,'items':[{'product_id':self.pid,'quantity':1}],'payments':[]}
+  body={'request_key':'free-ticket','customer_id':cid,'items':[{'request_key':'forbidden','product_id':self.pid,'quantity':1}],'payments':[]}
   with self.request('/api/sales',body) as r:ticket=json.load(r)
   self.assertEqual(ticket['total_cents'],0)
   with self.request('/api/sales',body) as r:self.assertEqual(json.load(r)['id'],ticket['id'])
@@ -46,18 +46,18 @@ class OperationsReviewTest(unittest.TestCase):
   self.assertEqual(len(self.history()['cash_movements']),2)
  def test_simple_restock_preserves_product_uses_latest_cost_and_rejects_invalid(self):
   with self.pos.db() as db:before=dict(db.execute('SELECT * FROM products WHERE id=?',(self.pid,)).fetchone())
-  with self.request('/api/inventory/restock',{'product_id':self.pid,'quantity':20}) as r:result=json.load(r)
+  with self.request('/api/inventory/restock',{'request_key':'restock-20','product_id':self.pid,'quantity':20}) as r:result=json.load(r)
   self.assertEqual((result['stock_before'],result['stock_after']),(20,40))
   with self.pos.db() as db:
    self.assertEqual(before,dict(db.execute('SELECT * FROM products WHERE id=?',(self.pid,)).fetchone()))
    batch=db.execute('SELECT * FROM batches WHERE id=?',(result['id'],)).fetchone()
    self.assertEqual((batch['quantity'],batch['unit_cost_cents'],batch['expires_on']),(20,500,None))
   for qty in (0,-1,1.5,'20',1000001):
-   with self.assertRaises(HTTPError):self.request('/api/inventory/restock',{'product_id':self.pid,'quantity':qty})
-  with self.assertRaises(HTTPError):self.request('/api/inventory/restock',{'product_id':99999,'quantity':1})
+   with self.assertRaises(HTTPError):self.request('/api/inventory/restock',{'request_key':'invalid-'+str(qty),'product_id':self.pid,'quantity':qty})
+  with self.assertRaises(HTTPError):self.request('/api/inventory/restock',{'request_key':'unknown','product_id':99999,'quantity':1})
   self.pos.save_user(1,{'username':'limited','display_name':'Limitado','secret':'abcdefgh','permissions':['sell']})
   with self.request('/api/login',{'username':'limited','secret':'abcdefgh'}) as r:self.cookie=r.headers['Set-Cookie'].split(';')[0]
-  with self.assertRaises(HTTPError) as e:self.request('/api/inventory/restock',{'product_id':self.pid,'quantity':1})
+  with self.assertRaises(HTTPError) as e:self.request('/api/inventory/restock',{'request_key':'forbidden','product_id':self.pid,'quantity':1})
   self.assertEqual(e.exception.code,403)
 
 if __name__=='__main__':unittest.main()

@@ -1,5 +1,7 @@
 """Instalador de prueba por usuario, sin permisos de administrador."""
 import os
+import json
+from build_info import VERSION
 from pathlib import Path
 import subprocess
 import sys
@@ -49,7 +51,7 @@ def install(target=TARGET, shortcut=True):
         try:shutil.rmtree(previous)
         except OSError:pass
     executable=target/('LunaDevPOS.exe' if (target/'LunaDevPOS.exe').exists() else 'NuvariaPOSEscritorio.exe')
-    (target/'instalacion.json').write_text('{"product":"LunaDev POS","version":"0.9.20261012"}',encoding='utf-8')
+    (target/'instalacion.json').write_text(json.dumps({'product':'LunaDev POS','version':VERSION}),encoding='utf-8')
     if shortcut:
         def quote(value):return "'"+str(value).replace("'","''")+"'"
         script="$taskShell=New-Object -ComObject WScript.Shell\n$taskLink=$taskShell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'LunaDev POS.lnk'))\n$taskLink.TargetPath="+quote(executable)+"\n$taskLink.WorkingDirectory="+quote(target)+"\n$taskLink.Save()"

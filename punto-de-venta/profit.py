@@ -1,8 +1,9 @@
 """Margen sobre costos históricos de lotes; no es utilidad neta del negocio."""
 def entries(db,start=None,end=None,shift_id=None,collection_entries=None):
-    sale_filter='s.shift_id=?' if shift_id is not None else "date(s.created_at,'localtime') BETWEEN ? AND ?"
-    return_filter='r.shift_id=?' if shift_id is not None else "date(r.created_at,'localtime') BETWEEN ? AND ?"
-    args=(shift_id,) if shift_id is not None else (start,end)
+    sale_filter='s.shift_id=?' if shift_id is not None else 's.created_at>=? AND s.created_at<?'
+    return_filter='r.shift_id=?' if shift_id is not None else 'r.created_at>=? AND r.created_at<?'
+    from time_ranges import utc_bounds
+    args=(shift_id,) if shift_id is not None else utc_bounds(db,start,end)
     rows=db.execute(f'''SELECT i.id item_id,NULL return_id,i.total_cents amount,i.tax_cents tax_cents,
         COALESCE((SELECT SUM(a.quantity*a.unit_cost_cents) FROM sale_item_batches a WHERE a.sale_item_id=i.id),0) cost_cents,
         COALESCE((SELECT SUM(a.quantity) FROM sale_item_batches a WHERE a.sale_item_id=i.id AND a.unit_cost_cents=0),0) zero_cost_units

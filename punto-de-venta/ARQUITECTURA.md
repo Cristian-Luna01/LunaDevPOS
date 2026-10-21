@@ -1,3 +1,11 @@
+# Arquitectura vigente
+
+Entrada de escritorio: native_desktop.py, con PySide6 y Qt WebEngine incluido. No depende de abrir un navegador externo. core.py mantiene transacciones SQLite; app.py recibe cuerpos y transmite respuestas fuera del bloqueo que protege autenticación y restauración. Se conservan claves foráneas, BEGIN IMMEDIATE y synchronous=FULL.
+
+Véanse docs/COMPILACION.md y docs/GUIA-ACTUALIZACION-0.2.md para la receta vigente y la migración. La sección siguiente es el documento histórico de la implementación inicial; no describe por sí sola el empaquetado actual.
+
+---
+
 # Arquitectura y flujo de datos
 
 ## 1. Despliegue y recursos

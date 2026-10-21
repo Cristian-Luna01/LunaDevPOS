@@ -58,6 +58,8 @@ def main():
     server.billing=BillingService(pos);server.billing.start()
     from desktop_clipboard import OwnerClipboard
     clipboard_service=OwnerClipboard(app);server.copy_owner_link=clipboard_service.copy_link
+    from directory_picker import DirectoryPicker
+    directory_service=DirectoryPicker(app);server.choose_backup_directory=directory_service.pick
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start();url=f'http://127.0.0.1:{server.server_port}'
     class LocalPage(QWebEnginePage):
         def acceptNavigationRequest(self,target,kind,main_frame):
@@ -67,7 +69,7 @@ def main():
             if not can_stop(pos):
                 QMessageBox.warning(self,'Turno pendiente','Primero cierra el turno en Caja y corte. El mostrador seguirá abierto para que puedas hacerlo.');event.ignore();return
             event.accept()
-    window=Window();window.setWindowTitle('LunaDev POS · Pruebas');window.resize(1150,800)
+    window=Window();window.setWindowTitle('LunaDev POS');window.resize(1150,800)
     from PySide6.QtWebEngineCore import QWebEngineProfile
     browser_profile=QWebEngineProfile('punto-venta',app);browser_profile.setPersistentStoragePath(str(directory/'web-profile'));browser_profile.setPersistentCookiesPolicy(QWebEngineProfile.NoPersistentCookies)
     view=QWebEngineView();page=LocalPage(browser_profile,view);view.setPage(page);window.setCentralWidget(view);views=[view];view.setUrl(QUrl(url+'/'))

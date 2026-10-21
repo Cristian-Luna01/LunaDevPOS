@@ -5,6 +5,7 @@ import re
 import json
 from pathlib import Path
 from inventory_io import backup_document
+from external_backup import write_copy
 
 
 def cleanup(pos):
@@ -39,7 +40,7 @@ def after_shift(pos, shift_id):
                     digest = document.pop('sha256')
                     saved = next(row for row in document['tables']['cash_shifts'] if row['id']==shift_id)
                     if digest == fingerprint(document) and saved == closed:
-                        return {'ok': True, 'path': str(candidate), 'retention_days': 30}
+                        return {'ok':True,'path':str(candidate),'retention_days':30,'external':write_copy(pos,candidate)}
                 except (OSError, ValueError, KeyError, StopIteration, TypeError):
                     pass
             now = dt.datetime.now(dt.timezone.utc)
@@ -54,6 +55,6 @@ def after_shift(pos, shift_id):
             finally:
                 temporary.unlink(missing_ok=True)
             cleanup(pos)
-            return {'ok': True, 'path': str(target), 'retention_days': 30}
+            return {'ok':True,'path':str(target),'retention_days':30,'external':write_copy(pos,target)}
     except Exception:
         return {'ok': False, 'warning': 'El turno quedó cerrado, pero no se pudo guardar el respaldo automático. Crea un respaldo desde Mantenimiento y revisa el espacio y los permisos de la carpeta de datos.'}

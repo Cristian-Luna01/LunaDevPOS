@@ -61,7 +61,7 @@ def register(target):
  target=safe(target,known_programs());exe=target/'Desinstalar-LunaDevPOS.exe'
  if not exe.exists():raise RuntimeError('Falta el desinstalador en el paquete')
  with winreg.CreateKey(winreg.HKEY_CURRENT_USER,REGISTRY_KEY) as key:
-  values={'DisplayName':'LunaDev POS','DisplayVersion':'0.9.20261012','Publisher':'LunaDev','InstallLocation':str(target),'DisplayIcon':str(target/'LunaDevPOS.exe'),'UninstallString':'"'+str(exe)+'"'}
+  values={'DisplayName':'LunaDev POS','DisplayVersion':__import__('build_info').VERSION,'Publisher':'LunaDev','InstallLocation':str(target),'DisplayIcon':str(target/'LunaDevPOS.exe'),'UninstallString':'"'+str(exe)+'"'}
   for name,value in values.items():winreg.SetValueEx(key,name,0,winreg.REG_SZ,value)
   for name in ('NoModify','NoRepair'):winreg.SetValueEx(key,name,0,winreg.REG_DWORD,1)
   winreg.SetValueEx(key,'EstimatedSize',0,winreg.REG_DWORD,sum(p.stat().st_size for p in target.rglob('*') if p.is_file())//1024)

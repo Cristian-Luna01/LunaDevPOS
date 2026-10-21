@@ -181,17 +181,26 @@ class POS:
             if direction not in ('in', 'out'):
                 raise Error('Dirección inválida')
             self.require(db, uid, 'cash.' + direction)
+            from operation_requests import previous,save
+            old=previous(db,uid,'cash',data)
+            if old is not None:return old
             sid = self.shift(db, uid)['id']
             mid = db.execute('INSERT INTO cash_movements(shift_id,user_id,direction,category,amount_cents,supplier_id,invoice_ref,concept) VALUES (?,?,?,?,?,?,?,?)',
                 (sid, uid, direction, required(data, 'category'), integer(data.get('amount_cents'), 'Importe', 1),
                  data.get('supplier_id'), data.get('invoice_ref'), required(data, 'concept'))).lastrowid
             self.audit(db, uid, 'cash.movement', mid, data)
-            return {'id': mid}
+            return save(db,uid,'cash',data,{'id':mid})
 
     def report(self, db, sid):
         shift = db.execute('SELECT * FROM cash_shifts WHERE id=?', (sid,)).fetchone()
         if not shift:
             raise Error('Turno inexistente', 404)
+        if shift['closed_at'] and shift['report_json']:
+            try:
+                saved=json.loads(shift['report_json'])
+                if not isinstance(saved,dict) or saved.get('shift_id')!=sid:raise ValueError()
+                return saved
+            except (ValueError,TypeError):raise Error('La copia guardada del corte no es válida. Revisa el respaldo original.',409)
         payments = {m: 0 for m in ('cash','debit','credit','transfer')}
         refunds = payments.copy()
         for r in db.execute('SELECT p.method,SUM(p.amount_cents) amount FROM sale_payments p JOIN sales s ON s.id=p.sale_id WHERE s.shift_id=? GROUP BY p.method', (sid,)):
@@ -224,6 +233,9 @@ class POS:
         sid = integer(data.get('shift_id'), 'Turno', 1)
         with self.db(True) as db:
             self.require(db, uid, 'sell')
+            from operation_journal import lookup
+            for intent in db.execute('SELECT kind,request_key FROM operation_intents WHERE user_id=? AND acknowledged=0',(uid,)):
+                if lookup(self,db,uid,intent['kind'],intent['request_key'])['state']=='not_found':raise Error('Comprueba o cancela la operación pendiente antes de cerrar el turno',409)
             existing = db.execute('SELECT * FROM cash_shifts WHERE id=? AND user_id=?', (sid,uid)).fetchone()
             if existing and existing['closed_at']:
                 if existing['counted_cents'] != counted:
@@ -232,6 +244,10 @@ class POS:
             else:
                 self.shift(db,uid,sid)
                 report = self.report(db, sid)
+                import profit
+                report.update(profit.shift(db,sid))
+                report['report_version']=2
+                report['user_name']=db.execute('SELECT display_name FROM users WHERE id=?',(uid,)).fetchone()[0]
                 report.update(counted_cents=counted, difference_cents=counted-report['expected_cents'], type='Z')
                 db.execute("UPDATE cash_shifts SET closed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),counted_cents=?,expected_cents=?,report_json=? WHERE id=? AND closed_at IS NULL",
                            (counted, report['expected_cents'], json.dumps(report), sid))
@@ -245,6 +261,8 @@ class POS:
         digest = fingerprint(data)
         with self.db(True) as db:
             self.require(db,uid,'sell')
+            cancelled=db.execute("SELECT 1 FROM operation_requests WHERE kind='sale' AND user_id=? AND request_key=?",(uid,key)).fetchone()
+            if cancelled:raise Error('Esta operación fue cancelada. No se registró otra venta.',409)
             previous = db.execute('SELECT * FROM sales WHERE request_key=?', (key,)).fetchone()
             if previous:
                 if previous['user_id'] != uid or previous['request_hash'] != digest:
@@ -439,6 +457,9 @@ class POS:
         """Entrada sencilla: conserva ficha y usa el último costo de recepción."""
         with self.db(True) as db:
             self.require(db,uid,'inventory.receive')
+            from operation_requests import previous,save
+            old=previous(db,uid,'restock',data)
+            if old is not None:return old
             pid=integer(data.get('product_id'),'Producto',1)
             product=db.execute('SELECT * FROM products WHERE id=? AND active=1',(pid,)).fetchone()
             if not product:raise Error('Producto inexistente o dado de baja',404)
@@ -449,11 +470,14 @@ class POS:
             bid=db.execute('INSERT INTO batches(product_id,lot_number,quantity,unit_cost_cents) VALUES (?,?,?,?)',(pid,'SIN LOTE CAPTURADO',qty,cost)).lastrowid
             db.execute("INSERT INTO inventory_movements(batch_id,user_id,quantity_delta,kind,reason) VALUES (?,?,?,'receipt','Recepción de mercancía')",(bid,uid,qty))
             self.audit(db,uid,'inventory.receive',bid,{'product_id':pid,'quantity':qty,'unit_cost_cents':cost})
-            return {'id':bid,'stock_before':before,'stock_after':before+qty}
+            return save(db,uid,'restock',data,{'id':bid,'stock_before':before,'stock_after':before+qty})
 
     def receive(self, uid, data):
         with self.db(True) as db:
             self.require(db,uid,'inventory.receive')
+            from operation_requests import previous,save
+            old=previous(db,uid,'receive',data)
+            if old is not None:return old
             expiry = data.get('expires_on') or None
             try:
                 if expiry is not None and dt.date.fromisoformat(expiry).isoformat()!=expiry:
@@ -467,7 +491,7 @@ class POS:
                  str(data.get('lot_number') or 'SIN LOTE CAPTURADO').strip(),expiry,qty,integer(data.get('unit_cost_cents'),'Costo'))).lastrowid
             db.execute("INSERT INTO inventory_movements(batch_id,user_id,quantity_delta,kind,reason) VALUES (?,?,?,'receipt',?)",(bid,uid,qty,required(data,'reason')))
             self.audit(db,uid,'inventory.receive',bid,data)
-            return {'id':bid}
+            return save(db,uid,'receive',data,{'id':bid})
 
     def adjust(self, uid, data):
         with self.db(True) as db:

@@ -19,6 +19,8 @@ def dates(data):
 def history(db,data,include_profit=False):
     start,end=dates(data)
     args=(start.isoformat(),end.isoformat())
+    from time_ranges import utc_bounds
+    bounds=utc_bounds(db,*args)
     # Una fila por partida, sin unir pagos ni lotes (evita multiplicar ventas).
     events=[dict(r) for r in db.execute('''SELECT date(s.created_at,'localtime') day,
         datetime(s.created_at,'localtime') happened_at,CASE WHEN EXISTS(SELECT 1 FROM customer_ledger l WHERE l.sale_id=s.id) THEN 'Crédito' ELSE 'Venta' END kind,s.id ticket_id,
@@ -26,15 +28,15 @@ def history(db,data,include_profit=False):
         i.quantity units,CASE WHEN EXISTS(SELECT 1 FROM customer_ledger l WHERE l.sale_id=s.id) THEN 0 ELSE i.total_cents END cents,s.status,
         CASE WHEN EXISTS(SELECT 1 FROM customer_ledger l WHERE l.sale_id=s.id) THEN i.total_cents ELSE 0 END credit_cents,NULL collection_id
         FROM sale_items i JOIN sales s ON s.id=i.sale_id JOIN products p ON p.id=i.product_id
-        WHERE date(s.created_at,'localtime') BETWEEN ? AND ?
+        WHERE s.created_at>=? AND s.created_at<?
         UNION ALL
         SELECT date(r.created_at,'localtime'),datetime(r.created_at,'localtime'),
         CASE WHEN r.kind='void' THEN 'Anulación' ELSE 'Devolución' END,r.sale_id,r.id,i.id,
         i.product_id,i.product_name,p.barcode,-ri.quantity,-ri.total_cents,s.status,0,NULL
         FROM return_items ri JOIN returns r ON r.id=ri.return_id JOIN sale_items i ON i.id=ri.sale_item_id
         JOIN sales s ON s.id=r.sale_id JOIN products p ON p.id=i.product_id
-        WHERE date(r.created_at,'localtime') BETWEEN ? AND ?
-        ORDER BY happened_at,ticket_id,item_id''',(*args,*args))]
+        WHERE r.created_at>=? AND r.created_at<?
+        ORDER BY happened_at,ticket_id,item_id''',(*bounds,*bounds))]
     from cash_basis import collections
     collection_entries=collections(db,*args)
     events.extend(collection_entries)
@@ -59,12 +61,12 @@ def history(db,data,include_profit=False):
     for row in daily.values():row['payments_by_method']={'cash':0,'card':0,'transfer':0}
     payment_rows=db.execute("""SELECT date(s.created_at,'localtime') day,p.method,p.amount_cents amount
         FROM sale_payments p JOIN sales s ON s.id=p.sale_id
-        WHERE date(s.created_at,'localtime') BETWEEN ? AND ? AND NOT EXISTS(SELECT 1 FROM customer_ledger l WHERE l.sale_id=s.id)
+        WHERE s.created_at>=? AND s.created_at<? AND NOT EXISTS(SELECT 1 FROM customer_ledger l WHERE l.sale_id=s.id)
         UNION ALL SELECT date(created_at,'localtime'),method,-amount_cents FROM customer_ledger
-        WHERE amount_cents<0 AND date(created_at,'localtime') BETWEEN ? AND ?
+        WHERE amount_cents<0 AND created_at>=? AND created_at<?
         UNION ALL SELECT date(r.created_at,'localtime'),p.method,-p.amount_cents
         FROM return_payments p JOIN returns r ON r.id=p.return_id
-        WHERE date(r.created_at,'localtime') BETWEEN ? AND ?""",(*args,*args,*args))
+        WHERE r.created_at>=? AND r.created_at<?""",(*bounds,*bounds,*bounds))
     for row in payment_rows:
         method='card' if row['method'] in ('debit','credit') else row['method']
         daily[row['day']]['payments_by_method'][method]+=row['amount']
@@ -74,7 +76,7 @@ def history(db,data,include_profit=False):
     cash_movements=[dict(r) for r in db.execute('''SELECT m.id,m.shift_id,m.direction,m.category,m.amount_cents,m.concept,m.invoice_ref,
         datetime(m.created_at,'localtime') happened_at,u.display_name user_name,s.business_name supplier_name
         FROM cash_movements m JOIN users u ON u.id=m.user_id LEFT JOIN suppliers s ON s.id=m.supplier_id
-        WHERE date(m.created_at,'localtime') BETWEEN ? AND ? ORDER BY m.created_at DESC,m.id DESC''',args)]
+        WHERE m.created_at>=? AND m.created_at<? ORDER BY m.created_at DESC,m.id DESC''',bounds)]
     cash_totals={direction:sum(m['amount_cents'] for m in cash_movements if m['direction']==direction) for direction in ('in','out')}
     result={'from':args[0],'to':args[1],'daily':days,'products':sorted(products.values(),key=lambda p:(-p['sold_units'],p['name'])),'events':events,'totals':totals,'cash_movements':cash_movements,'cash_totals':cash_totals}
     if include_profit:

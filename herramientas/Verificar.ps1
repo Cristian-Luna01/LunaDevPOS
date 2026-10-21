@@ -7,7 +7,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'No se instalaron dependencias de pruebas.' }
     python -m unittest discover -s . -p 'test_*.py'
     if ($LASTEXITCODE -ne 0) { throw 'Fallaron las pruebas Python.' }
-    node --test test_direction_responses.js test_financial_ui.js test_checkout_scanner.cjs
+    node --test test_direction_responses.js test_financial_ui.js test_checkout_scanner.cjs test_pending_operations.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Fallaron las pruebas de interfaz.' }
 } finally { Pop-Location }
 Push-Location (Join-Path $taskRoot 'pagina-administrador')

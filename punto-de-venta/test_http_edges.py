@@ -39,7 +39,7 @@ class HTTPEdgesTest(unittest.TestCase):
   self.assertEqual(e.exception.code,409)
   for error,status in [(sqlite3.OperationalError('database is locked'),503),(ValueError('invalid'),400),(RuntimeError('fallo controlado de prueba'),500)]:
    with patch.object(self.pos,'cash_movement',side_effect=error),patch('app.logging.exception'):
-    with self.assertRaises(HTTPError) as e:self.call('/api/cash',{})
+    with self.assertRaises(HTTPError) as e:self.call('/api/cash',{'request_key':'edge'})
     self.assertEqual(e.exception.code,status)
   with self.assertRaises(HTTPError) as e:self.call('/api/no-existe',{})
   self.assertEqual(e.exception.code,404)
