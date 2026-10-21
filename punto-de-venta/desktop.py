@@ -43,7 +43,7 @@ def can_stop(pos):
         return not db.execute('SELECT 1 FROM cash_shifts WHERE closed_at IS NULL').fetchone()
 
 def smoke_test(directory):
-    from urllib.request import urlopen
+    from urllib.request import build_opener, ProxyHandler
     pos=POS(Path(directory)/'pos.sqlite3')
     if initialized(Path(pos.path)):
         raise RuntimeError('La prueba requiere una carpeta vacía.')
@@ -52,7 +52,7 @@ def smoke_test(directory):
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
         for route in ['/', '/app.js', '/style.css', '/navigation.js', '/direccion/', '/direccion/panel.js']:
-            with urlopen(f'http://127.0.0.1:{server.server_port}'+route) as response:
+            with build_opener(ProxyHandler({})).open(f'http://127.0.0.1:{server.server_port}'+route,timeout=10) as response:
                 if response.status != 200 or not response.read(): raise RuntimeError('Recurso no disponible')
         with pos.db() as db:
             for table in ['products','sales','customers','cash_shifts']:

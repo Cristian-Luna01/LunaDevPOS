@@ -14,7 +14,13 @@ def main():
     legacy=Path(os.environ['LOCALAPPDATA'])/'NuvariaPOSEscritorioPrueba'/'data'
     directory=Path(args.data_dir) if args.data_dir else legacy if (legacy/'pos.sqlite3').exists() else Path(os.environ['LOCALAPPDATA'])/'LunaDevPOS'/'data'
     directory.mkdir(parents=True,exist_ok=True)
-    if args.self_test:smoke_test(directory);return
+    if args.self_test:
+        try:smoke_test(directory)
+        except Exception:
+            import traceback
+            (directory/'error-autoprueba.txt').write_text(traceback.format_exc(),encoding='utf-8')
+            raise SystemExit(1)
+        return
     from PySide6.QtCore import QUrl, Qt, QTimer
     from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QFormLayout, QLineEdit, QLabel, QPushButton, QMessageBox, QDialog, QDialogButtonBox, QTabWidget, QFileDialog, QComboBox
     from PySide6.QtGui import QShortcut, QKeySequence
