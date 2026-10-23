@@ -121,4 +121,14 @@ CREATE TABLE IF NOT EXISTS promotions(
 CREATE TABLE IF NOT EXISTS business_branding(id INTEGER PRIMARY KEY CHECK(id=1),png_base64 TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS business_settings(id INTEGER PRIMARY KEY CHECK(id=1),name TEXT NOT NULL,receipt_footer TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS customer_ledger(id INTEGER PRIMARY KEY,customer_id INTEGER NOT NULL REFERENCES customers(id),sale_id INTEGER UNIQUE REFERENCES sales(id),shift_id INTEGER NOT NULL REFERENCES cash_shifts(id),user_id INTEGER NOT NULL REFERENCES users(id),amount_cents INTEGER NOT NULL CHECK(amount_cents!=0),method TEXT CHECK(method IN ('cash','debit','transfer')),request_key TEXT UNIQUE,request_hash TEXT,created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')));
-PRAGMA user_version=10;
+CREATE INDEX IF NOT EXISTS batches_product_received ON batches(product_id,received_at DESC,id DESC);
+CREATE INDEX IF NOT EXISTS returns_sale ON returns(sale_id);
+CREATE INDEX IF NOT EXISTS return_items_sale_item ON return_items(sale_item_id);
+CREATE INDEX IF NOT EXISTS return_allocations_item ON return_allocations(return_item_id);
+CREATE TABLE IF NOT EXISTS operation_requests(kind TEXT NOT NULL,user_id INTEGER NOT NULL REFERENCES users(id),request_key TEXT NOT NULL,request_hash TEXT NOT NULL,result_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),PRIMARY KEY(kind,user_id,request_key));
+CREATE TABLE IF NOT EXISTS operation_intents(kind TEXT NOT NULL,user_id INTEGER NOT NULL REFERENCES users(id),request_key TEXT NOT NULL,body_json TEXT NOT NULL,shift_id INTEGER,acknowledged INTEGER NOT NULL DEFAULT 0 CHECK(acknowledged IN(0,1)),PRIMARY KEY(kind,user_id,request_key));
+CREATE INDEX IF NOT EXISTS sales_created ON sales(created_at);
+CREATE INDEX IF NOT EXISTS returns_created ON returns(created_at);
+CREATE INDEX IF NOT EXISTS customer_ledger_created ON customer_ledger(created_at);
+CREATE INDEX IF NOT EXISTS cash_movements_created ON cash_movements(created_at);
+PRAGMA user_version=11;

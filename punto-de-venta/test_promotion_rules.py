@@ -50,4 +50,4 @@ class PromotionRulesTest(unittest.TestCase):
             p=promotions.active(db)[self.pid]
             self.assertEqual(p['bundle_quantity'],1)
             self.assertEqual(p['schedule_type'],'temporary')
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],10)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],11)

@@ -43,7 +43,7 @@ class FullHistoryTest(unittest.TestCase):
  def test_more_than_screen_limit_and_costs_permission(self):
   self.receive(130,30)
   for n in range(125):self.pos.sale(1,{'request_key':'many-'+str(n),'items':[{'product_id':self.pid,'quantity':1}],'payments':[{'method':'cash','amount_cents':1160}]})
-  self.pos.save_user(1,{'username':'seller-export','display_name':'Vendedor','secret':'abcdefgh','permissions':['sell']})
+  self.pos.save_user(1,{'username':'seller-export','display_name':'Vendedor','secret':'abcdefgh','permissions':['sell','reports.view']})
   with self.request('/api/login',{'username':'seller-export','secret':'abcdefgh'}) as r:self.cookie=r.headers['Set-Cookie'].split(';')[0]
   day=dt.date.today().isoformat()
   with self.request('/api/sales/history.xlsx?from='+day+'&to='+day) as r:book=load_workbook(io.BytesIO(r.read()),data_only=True)

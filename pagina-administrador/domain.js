@@ -3,7 +3,7 @@ export function validateSnapshot(p){
  if(typeof p.instance_id!=='string'||!/^([a-f0-9]{32})$/.test(p.instance_id))throw Error('Computadora inválida');
  if(typeof p.name!=='string'||!p.name.trim()||p.name.length>100||typeof p.generated_at!=='string'||!Number.isFinite(Date.parse(p.generated_at)))throw Error('Sucursal inválida');
  const catalog=p.version===2?p.direction?.products:p.products;
- if(!/^\d{4}-\d{2}-\d{2}$/.test(p.today)||!Array.isArray(p.daily)||p.daily.length!==31||!Array.isArray(catalog)||catalog.length>10000)throw Error('Periodo o catálogo inválido');
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(p.today)||!Array.isArray(p.daily)||p.daily.length!==31||!Array.isArray(catalog)||catalog.length>50000)throw Error('Periodo o catálogo inválido');
  const dates=new Set(),ids=new Set();
  for(const d of p.daily){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(d.day)||dates.has(d.day))throw Error('Fecha inválida');dates.add(d.day);

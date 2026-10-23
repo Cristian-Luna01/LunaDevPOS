@@ -12,7 +12,7 @@ class APIAuditTest(unittest.TestCase):
  def test_product_lifecycle_inventory_and_report_routes(self):
   data=dict(barcode='AUDIT',name='Medicamento de prueba',category_id=1,cost_cents=550,price_cents=1000,tax_bps=0)
   pid=self.call('/api/products/save',data)['id']
-  bid=self.call('/api/inventory/receive',dict(product_id=pid,quantity=12,unit_cost_cents=550,reason='Factura de prueba'))['id']
+  bid=self.call('/api/inventory/receive',dict(request_key='receive-audit',product_id=pid,quantity=12,unit_cost_cents=550,reason='Factura de prueba'))['id']
   product=self.call('/api/products?q=AUDIT')[0]
   self.assertEqual((product['stock'],product['price_cents']),(12,1000))
   self.call('/api/products/save',dict(data,reason='Cambio de lista QA',id=pid,name='Medicamento editado',price_cents=1100))

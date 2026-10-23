@@ -19,6 +19,7 @@ from billing_schema import TABLES as FISCAL_TABLES
 TABLES += FISCAL_TABLES
 from card_fees import TABLES as FEE_TABLES
 TABLES += FEE_TABLES
+TABLES += ['operation_requests','operation_intents']
 
 def file_bytes(data):
     try:
@@ -265,18 +266,20 @@ def backup(pos,uid):
 
 def backup_document(db):
         tables={name:[dict(r) for r in db.execute('SELECT * FROM '+name)] for name in TABLES}
-        document={'format':'botica-backup','version':10,'created_at':dt.datetime.now(dt.timezone.utc).isoformat(),'tables':tables}
+        document={'format':'botica-backup','version':11,'created_at':dt.datetime.now(dt.timezone.utc).isoformat(),'tables':tables}
         document['sha256']=fingerprint(document)
         return json.dumps(document,ensure_ascii=False,separators=(',',':')).encode(),f'respaldo-{dt.datetime.now():%Y%m%d-%H%M%S}.botica.json','application/json'
 
 def read_backup(data):
     try:document=json.loads(file_bytes(data).decode('utf-8-sig'))
     except (ValueError,UnicodeError):raise Error('Respaldo ilegible')
-    if not isinstance(document,dict) or document.get('format')!='botica-backup' or document.get('version') not in (2,3,4,5,6,7,8,9,10):
+    if not isinstance(document,dict) or document.get('format')!='botica-backup' or document.get('version') not in (2,3,4,5,6,7,8,9,10,11):
         raise Error('Selecciona un respaldo completo Botica compatible (.botica.json)')
     digest=document.pop('sha256',None)
     if digest!=fingerprint(document):raise Error('El respaldo está incompleto o fue modificado; no coincide su verificación')
     tables=document.get('tables')
+    if document['version']<11 and isinstance(tables,dict):
+        tables.setdefault('operation_requests',[]);tables.setdefault('operation_intents',[])
     if document['version']<10 and isinstance(tables,dict):
         for name in ('customers','suppliers'):
             for row in tables.get(name,[]):row.setdefault('active',1)

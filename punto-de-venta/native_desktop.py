@@ -14,7 +14,13 @@ def main():
     legacy=Path(os.environ['LOCALAPPDATA'])/'NuvariaPOSEscritorioPrueba'/'data'
     directory=Path(args.data_dir) if args.data_dir else legacy if (legacy/'pos.sqlite3').exists() else Path(os.environ['LOCALAPPDATA'])/'LunaDevPOS'/'data'
     directory.mkdir(parents=True,exist_ok=True)
-    if args.self_test:smoke_test(directory);return
+    if args.self_test:
+        try:smoke_test(directory)
+        except Exception:
+            import traceback
+            (directory/'error-autoprueba.txt').write_text(traceback.format_exc(),encoding='utf-8')
+            raise SystemExit(1)
+        return
     from PySide6.QtCore import QUrl, Qt, QTimer
     from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QFormLayout, QLineEdit, QLabel, QPushButton, QMessageBox, QDialog, QDialogButtonBox, QTabWidget, QFileDialog, QComboBox
     from PySide6.QtGui import QShortcut, QKeySequence
@@ -58,6 +64,8 @@ def main():
     server.billing=BillingService(pos);server.billing.start()
     from desktop_clipboard import OwnerClipboard
     clipboard_service=OwnerClipboard(app);server.copy_owner_link=clipboard_service.copy_link
+    from directory_picker import DirectoryPicker
+    directory_service=DirectoryPicker(app);server.choose_backup_directory=directory_service.pick
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start();url=f'http://127.0.0.1:{server.server_port}'
     class LocalPage(QWebEnginePage):
         def acceptNavigationRequest(self,target,kind,main_frame):
@@ -67,7 +75,7 @@ def main():
             if not can_stop(pos):
                 QMessageBox.warning(self,'Turno pendiente','Primero cierra el turno en Caja y corte. El mostrador seguirá abierto para que puedas hacerlo.');event.ignore();return
             event.accept()
-    window=Window();window.setWindowTitle('LunaDev POS · Pruebas');window.resize(1150,800)
+    window=Window();window.setWindowTitle('LunaDev POS');window.resize(1150,800)
     from PySide6.QtWebEngineCore import QWebEngineProfile
     browser_profile=QWebEngineProfile('punto-venta',app);browser_profile.setPersistentStoragePath(str(directory/'web-profile'));browser_profile.setPersistentCookiesPolicy(QWebEngineProfile.NoPersistentCookies)
     view=QWebEngineView();page=LocalPage(browser_profile,view);view.setPage(page);window.setCentralWidget(view);views=[view];view.setUrl(QUrl(url+'/'))

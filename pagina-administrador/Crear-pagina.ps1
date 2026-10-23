@@ -40,6 +40,7 @@ Invoke-Cloud @('d1','create',$databaseName,'--binding','DB','--update-config','-
 Invoke-Cloud @('d1','execute',$databaseName,'--remote','--file','schema.sql','--yes')
 Invoke-Cloud @('d1','execute',$databaseName,'--remote','--file','migrations/0002_full_direction.sql','--yes')
 # Publicar primero sin credenciales no abre el acceso: el Worker falla cerrado.
+Invoke-Cloud @('d1','execute',$databaseName,'--remote','--file','migrations/0003_reliable_transfers.sql','--yes')
 Invoke-Cloud @('deploy')
 $randomBytes = New-Object byte[] 32
 $rng = [Security.Cryptography.RandomNumberGenerator]::Create()

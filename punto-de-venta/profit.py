@@ -1,8 +1,9 @@
 """Margen sobre costos históricos de lotes; no es utilidad neta del negocio."""
-def entries(db,start=None,end=None,shift_id=None):
-    sale_filter='s.shift_id=?' if shift_id is not None else "date(s.created_at,'localtime') BETWEEN ? AND ?"
-    return_filter='r.shift_id=?' if shift_id is not None else "date(r.created_at,'localtime') BETWEEN ? AND ?"
-    args=(shift_id,) if shift_id is not None else (start,end)
+def entries(db,start=None,end=None,shift_id=None,collection_entries=None):
+    sale_filter='s.shift_id=?' if shift_id is not None else 's.created_at>=? AND s.created_at<?'
+    return_filter='r.shift_id=?' if shift_id is not None else 'r.created_at>=? AND r.created_at<?'
+    from time_ranges import utc_bounds
+    args=(shift_id,) if shift_id is not None else utc_bounds(db,start,end)
     rows=db.execute(f'''SELECT i.id item_id,NULL return_id,i.total_cents amount,i.tax_cents tax_cents,
         COALESCE((SELECT SUM(a.quantity*a.unit_cost_cents) FROM sale_item_batches a WHERE a.sale_item_id=i.id),0) cost_cents,
         COALESCE((SELECT SUM(a.quantity) FROM sale_item_batches a WHERE a.sale_item_id=i.id AND a.unit_cost_cents=0),0) zero_cost_units
@@ -16,15 +17,15 @@ def entries(db,start=None,end=None,shift_id=None):
     for row in rows:
         d=dict(row);d['profit_cents']=d['amount']-d['cost_cents'];result.append(d)
     from cash_basis import collections
-    result.extend(collections(db,start,end,shift_id))
+    result.extend(collections(db,start,end,shift_id) if collection_entries is None else collection_entries)
     return result
 
 def shift(db,sid):
     rows=entries(db,shift_id=sid)
     return {k:sum(r[k] for r in rows) for k in ('tax_cents','cost_cents','profit_cents','zero_cost_units')}
 
-def add_history(db,result):
-    details={(r['item_id'],r['return_id'],r.get('collection_id')):r for r in entries(db,result['from'],result['to'])}
+def add_history(db,result,collection_entries=None):
+    details={(r['item_id'],r['return_id'],r.get('collection_id')):r for r in entries(db,result['from'],result['to'],collection_entries=collection_entries)}
     days={d['day']:d for d in result['daily']};products={p['id']:p for p in result['products']}
     keys=('tax_cents','cost_cents','profit_cents','zero_cost_units')
     for row in [result['totals'],*days.values(),*products.values()]:row.update({k:0 for k in keys})

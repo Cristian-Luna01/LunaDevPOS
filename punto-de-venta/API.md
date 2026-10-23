@@ -25,7 +25,7 @@ Todas las cantidades monetarias son centavos y las cantidades de inventario son 
 | POST `/api/products/deactivate` | `{id}`; `products.delete` |
 | GET `/api/suppliers` | Directorio de proveedores, máximo 200 |
 | POST `/api/suppliers/save` | `{id?,business_name,contact,phone,credit_days}`; `suppliers.manage` |
-| GET `/api/customers?q=` | Buscar nombre/teléfono, máximo 50 |
+| GET `/api/customers?q=` | Buscar nombre/teléfono; lista completa para selección |
 | POST `/api/customers/save` | `{id?,name,phone,discount_bps}`; `customers.manage` |
 | GET `/api/customers/history?id=1` | Últimas 100 compras; `reports.view` |
 | POST `/api/inventory/receive` | Recepción con lote y costo; `inventory.receive` |
@@ -117,7 +117,7 @@ POST `/api/inventory/adjust`
 {"batch_id":1,"expected_quantity":30,"counted_quantity":28,"reason":"Merma: dos empaques rotos"}
 ```
 
-Si la existencia actual dejó de ser 30, el ajuste devuelve 409; el operador debe revisar el nuevo estado. No repitas a ciegas recepciones o movimientos de efectivo después de una respuesta incierta: estas rutas no llevan claves de idempotencia. Consulta el registro antes de reenviar.
+Si la existencia actual dejó de ser 30, el ajuste devuelve 409; el operador debe revisar el nuevo estado. No repitas a ciegas recepciones o movimientos de efectivo después de una respuesta incierta: estas rutas exigen request_key; el diario de operaciones permite comprobarlas. Consulta el registro antes de reenviar.
 
 ## Ejemplo: corte Z
 
@@ -161,4 +161,6 @@ Ante una respuesta perdida, reintenta ventas/devoluciones con **la misma clave y
 - GET `/api/inventory/undated`: lista hasta 200 lotes con stock sin fecha.
 - POST `/api/inventory/batch/edit`: `{batch_id, lot_number?, expires_on?, reason}`; permiso `inventory.adjust`.
 
-Los archivos admiten hasta 64 MB antes de codificar a base64 y la importación admite hasta 50,000 registros. Los respaldos Botica actuales son versión 2; el inventario JSON usa formato botica-inventory, versión 1. En recepción, proveedor, lote y expires_on ahora son opcionales; fecha vacía se guarda como NULL.
+Los archivos admiten hasta 64 MB antes de codificar a base64 y la importación admite hasta 50,000 registros. Los respaldos Botica actuales son versión 11; el inventario JSON usa formato botica-inventory, versión 1. En recepción, proveedor, lote y expires_on ahora son opcionales; fecha vacía se guarda como NULL.
+
+Historial general, CSV y Excel requieren reports.view. Las rutas /api/cash, /api/inventory/restock y /api/inventory/receive exigen request_key. /api/operations/prepare, pending, ack y cancel permiten recuperar o cancelar el mismo intento de forma durable y aislada por usuario. Las cancelaciones no borran operaciones ya confirmadas.

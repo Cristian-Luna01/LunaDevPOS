@@ -8,6 +8,8 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
+import socket
+import time
 import os
 import sqlite3
 from urllib.parse import urlparse, parse_qs
@@ -26,7 +28,15 @@ class Handler(BaseHTTPRequestHandler):
         # Evita registrar nombres, teléfonos, búsquedas y credenciales.
         logging.info('%s %s', self.command, urlparse(self.path).path)
 
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(10)
+
     def send(self, status, body, mime='application/json; charset=utf-8', cookie=None, filename=None):
+        if getattr(self,'_defer_response',False):
+            self._response=(status,body,mime,cookie,filename)
+            return
+        if callable(body):body=body()
         if not isinstance(body,bytes):
             body = json.dumps(body,ensure_ascii=False).encode('utf-8')
         self.send_response(status)
@@ -50,10 +60,59 @@ class Handler(BaseHTTPRequestHandler):
         self.handle_request(True)
 
     def handle_request(self, write):
-        # Autenticación y operación quedan en la misma sección protegida durante
-        # una restauración: ninguna solicitud conserva un uid de la base anterior.
-        with self.server.pos.request_lock:
-            self.handle_locked_request(write)
+        # La espera de red nunca retiene el bloqueo de identidad/restauración.
+        try:
+            self._request_data=None
+            host=self.headers.get('Host','')
+            if host not in (f'127.0.0.1:{self.server.server_port}',f'localhost:{self.server.server_port}'):
+                raise Error('Host no permitido',403)
+            if write:
+                if self.headers.get('Origin') not in (None,f'http://{host}') or self.headers.get('X-POS-Request')!='1':raise Error('Origen de solicitud no permitido',403)
+                if self.headers.get('Content-Type','').split(';')[0]!='application/json':raise Error('Usa application/json',415)
+                if self.headers.get('Transfer-Encoding'):raise Error('Transferencia no admitida',400)
+                path=urlparse(self.path).path
+                file_route=path in ('/api/branding','/direccion/api/branding','/api/inventory/import/preview','/api/inventory/import/confirm','/api/backup/preview','/api/backup/restore')
+                length=int(self.headers.get('Content-Length','0'))
+                if not 0<length<=(90*1024*1024 if file_route else 262144):raise Error('Tamaño de solicitud inválido',413)
+                deadline=time.monotonic()+30;remaining=length;parts=[]
+                while remaining:
+                    seconds=deadline-time.monotonic()
+                    if seconds<=0:raise TimeoutError()
+                    self.connection.settimeout(min(10,seconds))
+                    chunk=self.rfile.read1(min(65536,remaining))
+                    if not chunk:raise Error('Solicitud incompleta',400)
+                    parts.append(chunk);remaining-=len(chunk)
+                self._request_data=json.loads(b''.join(parts))
+                if not isinstance(self._request_data,dict):raise Error('Objeto JSON requerido')
+            self.connection.settimeout(10)
+            if write and urlparse(self.path).path=='/api/backup/external/choose':
+                pos=self.server.pos
+                cookies=SimpleCookie(self.headers.get('Cookie',''));name=f'pos_session_{self.server.server_port}'
+                token=cookies[name].value if name in cookies else ''
+                with pos.request_lock:
+                    uid=pos.session_user(token)
+                    with pos.db() as db:pos.require(db,uid,'backup.manage')
+                picker=getattr(self.server,'choose_backup_directory',None)
+                if not picker:raise Error('El selector está disponible en la aplicación de escritorio. También puedes escribir la ruta.',503)
+                directory=picker()
+                with pos.request_lock:pos.session_user(token)
+                return self.send(200,{'directory':directory})
+            self._defer_response=True;self._response=None
+            lock=self.server.pos.request_lock
+            if not lock.acquire(timeout=10):raise Error('Operación ocupada. Vuelve a consultar antes de repetir un cobro.',503)
+            try:self.handle_locked_request(write)
+            finally:lock.release()
+            self._defer_response=False
+            if self._response:self.send(*self._response)
+        except (TimeoutError,socket.timeout):
+            self._defer_response=False;self.close_connection=True
+            try:self.send(408,{'error':'Tiempo de solicitud agotado. Consulta el registro antes de reintentar.'})
+            except OSError:pass
+        except (BrokenPipeError,ConnectionResetError):self.close_connection=True
+        except (Error,ValueError) as e:
+            self._defer_response=False;self.close_connection=True
+            try:self.send(e.status if isinstance(e,Error) else 400,{'error':str(e) if isinstance(e,Error) else 'Solicitud inválida'})
+            except OSError:pass
 
     def handle_locked_request(self, write):
         try:
@@ -70,13 +129,13 @@ class Handler(BaseHTTPRequestHandler):
                 file_route=path in ('/api/branding','/direccion/api/branding','/api/inventory/import/preview','/api/inventory/import/confirm','/api/backup/preview','/api/backup/restore')
                 if not 0<length<=(90*1024*1024 if file_route else 262144):
                     raise Error('Tamaño de solicitud inválido',413)
-                data = json.loads(self.rfile.read(length))
+                data = self._request_data
                 if not isinstance(data,dict):
                     raise Error('Objeto JSON requerido')
             else:
                 data = {k:v[0] for k,v in parse_qs(urlparse(self.path).query).items()}
-            if not write and path in ('/','/tickets-ui.js','/entities-ui.js','/card-fees-ui.js','/billing-ui.js','/login-hints.js','/live-view.js','/owner-access-ui.js','/metric-help.js','/app.js','/style.css','/inventory-ui.js','/direccion','/direccion/','/direccion/panel.js','/stock.js','/reports.js','/promotions-ui.js','/branding.js','/navigation.js'):
-                filename,mime = {'/tickets-ui.js':('tickets-ui.js','text/javascript'),'/entities-ui.js':('entities-ui.js','text/javascript'),'/card-fees-ui.js':('card-fees-ui.js','text/javascript'),'/billing-ui.js':('billing-ui.js','text/javascript'),'/login-hints.js':('login-hints.js','text/javascript'),'/live-view.js':('live-view.js','text/javascript'),'/owner-access-ui.js':('owner-access-ui.js','text/javascript'),'/metric-help.js':('metric-help.js','text/javascript'),'/navigation.js':('navigation.js','text/javascript'),'/branding.js':('branding.js','text/javascript'),'/':('index.html','text/html'),'/app.js':('app.js','text/javascript'),'/inventory-ui.js':('inventory-ui.js','text/javascript'),'/direccion':('direction.html','text/html'),'/direccion/':('direction.html','text/html'),'/direccion/panel.js':('direction.js','text/javascript'),'/promotions-ui.js':('promotions-ui.js','text/javascript'),'/reports.js':('reports.js','text/javascript'),'/stock.js':('stock.js','text/javascript'),'/style.css':('style.css','text/css')}[path]
+            if not write and path in ('/','/backup-external-ui.js','/pending-operations.js','/tickets-ui.js','/entities-ui.js','/card-fees-ui.js','/billing-ui.js','/login-hints.js','/live-view.js','/owner-access-ui.js','/metric-help.js','/app.js','/style.css','/inventory-ui.js','/direccion','/direccion/','/direccion/panel.js','/stock.js','/reports.js','/promotions-ui.js','/branding.js','/navigation.js'):
+                filename,mime = {'/backup-external-ui.js':('backup-external-ui.js','text/javascript'),'/pending-operations.js':('pending-operations.js','text/javascript'),'/tickets-ui.js':('tickets-ui.js','text/javascript'),'/entities-ui.js':('entities-ui.js','text/javascript'),'/card-fees-ui.js':('card-fees-ui.js','text/javascript'),'/billing-ui.js':('billing-ui.js','text/javascript'),'/login-hints.js':('login-hints.js','text/javascript'),'/live-view.js':('live-view.js','text/javascript'),'/owner-access-ui.js':('owner-access-ui.js','text/javascript'),'/metric-help.js':('metric-help.js','text/javascript'),'/navigation.js':('navigation.js','text/javascript'),'/branding.js':('branding.js','text/javascript'),'/':('index.html','text/html'),'/app.js':('app.js','text/javascript'),'/inventory-ui.js':('inventory-ui.js','text/javascript'),'/direccion':('direction.html','text/html'),'/direccion/':('direction.html','text/html'),'/direccion/panel.js':('direction.js','text/javascript'),'/promotions-ui.js':('promotions-ui.js','text/javascript'),'/reports.js':('reports.js','text/javascript'),'/stock.js':('stock.js','text/javascript'),'/style.css':('style.css','text/css')}[path]
                 return self.send(200,(ROOT/'static'/filename).read_bytes(),mime+'; charset=utf-8')
             pos = self.server.pos
             if not write and path=='/favicon.svg':return self.send(200,(ROOT/'static'/'favicon.svg').read_bytes(),'image/svg+xml')
@@ -138,6 +197,21 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/inventory/count' and write:
                 from inventory_count import apply
                 return self.send(200,apply(pos,uid,data))
+            if path=='/api/backup/external':
+                from external_backup import settings,configure
+                with pos.db() as db:pos.require(db,uid,'backup.manage')
+                return self.send(200,configure(pos,data.get('directory','')) if write else settings(pos))
+            if path=='/api/backup/external/copy' and write:
+                from external_backup import write_copy
+                with pos.db() as db:
+                    pos.require(db,uid,'backup.manage')
+                    closed=db.execute('SELECT id FROM cash_shifts WHERE closed_at IS NOT NULL ORDER BY id DESC LIMIT 1').fetchone()
+                if not closed:raise Error('Primero cierra un turno para crear y comprobar su respaldo automático')
+                from automatic_backup import after_shift
+                result=after_shift(pos,closed[0]);return self.send(200,result)
+            if path.startswith('/api/operations/'):
+                from operation_journal import handle
+                return self.send(200,handle(pos,uid,path.rsplit('/',1)[-1],data,write))
             if path=='/api/credit' and not write:return self.send(200,credit.read(pos,uid,data))
             if path=='/api/credit/payment' and write:return self.send(200,credit.payment(pos,uid,data))
             if write and path=='/api/settings':return self.send(200,branding.save_settings(pos,uid,data))
@@ -145,14 +219,13 @@ class Handler(BaseHTTPRequestHandler):
             if write and path=='/api/promotions/save':return self.send(200,promotions.save(pos,uid,data))
             if not write and path in ('/api/sales/history','/api/sales/history.csv','/api/sales/history.xlsx'):
                 with pos.db() as db:
-                    if not pos.permissions(db,uid).intersection({'sell','reports.view'}):
-                        raise Error('No tienes permiso para consultar ventas',403)
+                    pos.require(db,uid,'reports.view')
                     result=analytics.history(db,data,'costs.view' in pos.permissions(db,uid))
                 if path.endswith('.xlsx'):
                     from history_xlsx import export_history_xlsx
-                    return self.send(200,export_history_xlsx(result),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',filename=f"historial-{result['from']}-{result['to']}-completo.xlsx")
+                    return self.send(200,lambda:export_history_xlsx(result),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',filename=f"historial-{result['from']}-{result['to']}-completo.xlsx")
                 if path.endswith('.csv'):
-                    return self.send(200,analytics.export_history(result,data.get('summary')=='1'),'text/csv; charset=utf-8',filename=f"ventas-{result['from']}-{result['to']}{'-resumen' if data.get('summary')=='1' else '-detalle'}.csv")
+                    return self.send(200,lambda:analytics.export_history(result,data.get('summary')=='1'),'text/csv; charset=utf-8',filename=f"ventas-{result['from']}-{result['to']}{'-resumen' if data.get('summary')=='1' else '-detalle'}.csv")
                 return self.send(200,result)
             if not write and path=='/api/inventory/export':
                 body,filename,mime=inventory_io.export_inventory(pos,uid,data.get('format','json'))
@@ -180,10 +253,25 @@ class Handler(BaseHTTPRequestHandler):
             if write and path in operations:
                 if path=='/api/shifts/open':
                     integer(data.get('shift_number'), 'Turno', 1, 2)
+                if path in ('/api/cash','/api/inventory/receive','/api/inventory/restock'):required(data,'request_key')
+                kinds={'/api/sales':'sale','/api/cash':'cash','/api/inventory/restock':'restock','/api/inventory/receive':'receive'}
+                if path in kinds:
+                    from operation_journal import lookup
+                    from core import fingerprint
+                    with pos.db() as db:
+                        other=db.execute('SELECT 1 FROM operation_intents WHERE user_id=? AND acknowledged=0 AND NOT(kind=? AND request_key=?)',(uid,kinds[path],data.get('request_key',''))).fetchone()
+                        if other:raise Error('Comprueba la operación pendiente antes de iniciar otra',409)
+                        intent=db.execute('SELECT body_json,shift_id FROM operation_intents WHERE kind=? AND user_id=? AND request_key=?',(kinds[path],uid,data.get('request_key',''))).fetchone()
+                        if intent:
+                            if fingerprint(json.loads(intent['body_json']))!=fingerprint(data):raise Error('La operación pendiente tiene otros datos',409)
+                            if kinds[path] in ('sale','cash') and lookup(pos,db,uid,kinds[path],data['request_key'])['state']=='not_found':
+                                current=db.execute('SELECT id FROM cash_shifts WHERE user_id=? AND closed_at IS NULL',(uid,)).fetchone()
+                                if not current or current[0]!=intent['shift_id']:raise Error('El turno original ya no está abierto. Cancela la operación pendiente; no se trasladará a otro turno.',409)
                 result=operations[path](uid,data)
                 if path=='/api/shifts/close':
                     with pos.db() as db:
-                        if 'costs.view' in pos.permissions(db,uid):result.update(profit.shift(db,result['shift_id']))
+                        if 'costs.view' not in pos.permissions(db,uid):
+                            for key in ('tax_cents','cost_cents','profit_cents','zero_cost_units'):result.pop(key,None)
                 return self.send(200,result)
             result = self.mutate(pos,uid,path,data) if write else self.read(pos,uid,path,data)
             self.send(200,result)
@@ -305,15 +393,8 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/products':
                 q = data.get('q','')[:100]
                 offset = max(0,int(data.get('offset','0')))
-                columns = 'p.id,p.barcode,p.name,p.generic_name,p.category_id,p.price_cents,p.tax_bps,p.min_stock,p.max_stock,p.reorder_point,p.requires_prescription'
-                if 'costs.view' in permissions:
-                    columns += ',p.cost_cents'
-                # Búsqueda acotada. LIKE contiene es fallback para catálogos modestos.
-                rows = db.execute(f'''SELECT {columns},COALESCE(b.stock,0) stock,COALESCE(b.physical_stock,0) physical_stock FROM products p
-                    LEFT JOIN (SELECT product_id,SUM(CASE WHEN expires_on IS NULL OR expires_on>? THEN quantity ELSE 0 END) stock,SUM(quantity) physical_stock FROM batches GROUP BY product_id) b ON b.product_id=p.id
-                    WHERE p.active=1 AND (p.barcode=? OR p.name LIKE ? OR p.generic_name LIKE ?) ORDER BY (p.barcode=?) DESC,p.name LIMIT 40 OFFSET ?''',
-                    (dt.date.today().isoformat(),q,'%'+q+'%','%'+q+'%',q,offset))
-                result = [dict(r) for r in rows]
+                from catalog_search import search
+                result=search(db,q,offset,'costs.view' in permissions)
                 active=promotions.active(db)
                 for p in result:promotions.decorate(p,active.get(p['id']))
                 if 'costs.view' in permissions:
@@ -340,11 +421,17 @@ class Handler(BaseHTTPRequestHandler):
                     raise Error('Turno inexistente',404)
                 if row['closed_at'] and row['user_id']==uid:
                     result=pos.report(db,sid)
-                    if 'costs.view' in permissions:result.update(profit.shift(db,sid))
+                    if 'costs.view' in permissions:
+                        if 'profit_cents' not in result:result.update(profit.shift(db,sid))
+                    else:
+                        for key in ('tax_cents','cost_cents','profit_cents','zero_cost_units'):result.pop(key,None)
                     return result
                 pos.require(db,uid,'reports.view')
                 result=pos.report(db,sid) if row['closed_at'] else dict(pos.report(db,sid),type='X')
-                if 'costs.view' in permissions:result.update(profit.shift(db,sid))
+                if 'costs.view' in permissions:
+                    if 'profit_cents' not in result:result.update(profit.shift(db,sid))
+                else:
+                    for key in ('tax_cents','cost_cents','profit_cents','zero_cost_units'):result.pop(key,None)
                 return result
             if path=='/api/reports/general':
                 pos.require(db,uid,'reports.view')
