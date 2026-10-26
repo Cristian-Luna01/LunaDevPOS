@@ -35,8 +35,10 @@ const worker={async scheduled(event,env,ctx){ctx.waitUntil(Promise.all([cleanup(
    if(attempt?.until_at>now)return json({error:'Demasiados intentos. Espera 15 minutos.'},429);
    const p=await body(r);
    if(typeof p.secret!=='string'||p.secret.length>200||(p.email||p.username)?.toLowerCase()!==env.OWNER_EMAIL.toLowerCase()||await hash(p.secret)!==env.OWNER_PASSWORD_SHA256){
-    const failures=(attempt&&attempt.until_at>now-900000?attempt.failures:0)+1;
-    await env.DB.prepare('INSERT INTO attempts(key,failures,until_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET failures=excluded.failures,until_at=excluded.until_at').bind(address,failures,now+(failures>=5?900000:0)).run();return json({error:'Correo o clave incorrectos'},401);
+    // El incremento es atómico: peticiones paralelas no pierden intentos leídos a la vez.
+    await env.DB.prepare(`INSERT INTO attempts(key,failures,until_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET
+     failures=CASE WHEN attempts.until_at>? THEN attempts.failures+1 ELSE 1 END,
+     until_at=CASE WHEN attempts.until_at>? THEN attempts.until_at WHEN attempts.until_at>? AND attempts.failures>=4 THEN ? ELSE ? END`).bind(address,now,now-900000,now,now-900000,now+900000,now).run();return json({error:'Correo o clave incorrectos'},401);
    }
    const token=key();await env.DB.batch([env.DB.prepare('DELETE FROM attempts WHERE key=?').bind(address),env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('INSERT INTO sessions VALUES(?,?)').bind(await hash(token),now+43200000)]);
    return json({ok:true},200,{'Set-Cookie':`central_session=${token}; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`});

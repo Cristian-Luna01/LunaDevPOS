@@ -10,7 +10,7 @@ Se usaron como referencias primarias:
 - [OWASP WSTG 4.2](https://wstg.owasp.org/stable/4-Web_Application_Security_Testing/): pruebas de autenticación, autorización, sesiones, validación, configuración y lógica de negocio.
 - [NIST SSDF, SP 800-218](https://csrc.nist.gov/pubs/sp/800/218/final): revisión de código y componentes, pruebas, tratamiento de hallazgos y prevención de regresiones.
 
-Las pruebas fueron locales y sobre datos ficticios. No se atacó, modificó ni certificó la configuración de una cuenta real de Cloudflare, una computadora del establecimiento o una base comercial. Las pruebas del Worker usan SQLite y la interfaz de pruebas de D1; no equivalen a una prueba de capacidad en la infraestructura real.
+Las pruebas adversarias y de carga fueron locales y sobre datos ficticios. Además, el propietario proporcionó el dominio de su publicación de pruebas: se hicieron cinco consultas de lectura sin iniciar sesión, se guardó un respaldo privado de D1 y se publicó la corrección en el mismo servicio y cuenta comprobados. Se aplicó solo una migración aditiva de tablas/índices, sin sentencias de borrado ni sustitución de claves. No se certificó la protección de la cuenta de Cloudflare ni se modificó el equipo del establecimiento. Las pruebas de carga del Worker usan SQLite y la interfaz de pruebas de D1; no equivalen a una prueba de capacidad en la infraestructura real.
 
 ## Hallazgos y tratamiento
 
@@ -26,16 +26,21 @@ Las pruebas fueron locales y sobre datos ficticios. No se atacó, modificó ni c
 | SEC-08 | Consulta de un local hidrataba también inventarios de otros locales. | Selección parametrizada por ID antes de recuperar/hidratar documentos. | Prueba: un documento dañado de otro local no impide consultar el local seleccionado; el conjunto completo falla sin presentar totales engañosos. |
 | SEC-09 | El instalador buscaba powershell.exe mediante una ruta parcial. | Ruta absoluta desde SystemRoot; argumentos en lista, sin shell=True. | Revisión de llamada y pruebas de arranque/instalación. No protege frente a un sistema operativo ya comprometido. |
 | SEC-10 | No había un flujo de seguridad continuo. | GitHub Actions separado: npm audit, pip-audit, Gitleaks y revisión Bandit; se mantienen las pruebas funcionales. | Archivos de workflow, versiones de herramientas fijadas y huella del binario de Gitleaks. |
+| SEC-11 | El contador de fallos centrales podía perder incrementos al leer/escribir intentos concurrentes. | Incremento y decisión de bloqueo mediante UPSERT atómico. | Doce accesos incorrectos concurrentes dejan el bloqueo activo; el siguiente acceso se rechaza con 429. |
 
 ## Comprobaciones ejecutadas
 
 - 232 pruebas Python aprobadas, incluidas nueve adversarias nuevas: rutas anónimas, sesión vencida/revocada, credenciales exactas, SQL hostil, rutas de archivo, CSRF, XML UTF-16 y agotamiento de conexiones. Suite completa aprobada tanto en el motor anterior como en el actualizado.
-- 20 pruebas del panel central aprobadas: autenticación, limitación de intentos, cookies, separación de sucursales, caducidad, entradas inválidas, HTTPS/cabeceras, réplica grande y conservación de resultados.
+- 21 pruebas del panel central aprobadas: autenticación, limitación de intentos secuenciales y concurrentes, cookies, separación de sucursales, caducidad, entradas inválidas, HTTPS/cabeceras, réplica grande y conservación de resultados.
 - Las 16 pruebas de interfaz del POS se ejecutan también en la verificación general: incluyen escáner, limpieza del cliente, importes y recuperación de operaciones.
 - Instalación aislada del ejecutable, autoprueba de la aplicación instalada y arranque Qt WebEngine aprobados. El motor identificado por la entrega es Python 3.14.10, OpenSSL 3.5.9 y Qt 6.12.0, con Chromium base 140.0.7339.225 y nivel de parches de seguridad 152.0.7977.83 declarado por Qt. Es inventario de componentes, no una auditoría exhaustiva de todos sus binarios.
 - Gitleaks 8.30.1 sobre el historial completo de base: 14 commits, aproximadamente 1.24 MB analizados. Tres coincidencias correspondían a UUID de idempotencia documentados/de prueba, no credenciales. Se conservan excepciones por huella exacta en `.gitleaksignore`; tras clasificarlas no quedaron coincidencias pendientes. Las nuevas confirmaciones se vuelven a escanear en CI.
 - Bandit 1.9.4: 38 coincidencias revisadas individualmente en `bandit-revisado.json`. Predominan SQL con identificadores internos y valores parametrizados, importación de subprocess y construcción de XML de exportación. No se desactivaron reglas globales: una coincidencia nueva o con contexto de código distinto hace fallar la revisión. Esto es una revisión de alcance limitado, no una prueba de inexistencia de inyección en todo contexto posible.
 - No se incluyeron credenciales reales ni bases del negocio en los ensayos o en la entrega.
+
+### Publicación de pruebas: antes y después
+
+El HTTPS existente validó su certificado y las consultas anónimas o con una sesión falsa devolvieron 401 sin campos financieros. Sin embargo, HTTP devolvía 200 sin redirigir y faltaban HSTS/otras cabeceras. Tras el despliegue, las cinco consultas verificaron los estados 200 (página HTTPS), 308 (HTTP a HTTPS), 401, 401 y 401 (datos protegidos), y las cabeceras HSTS, CSP, DENY, nosniff, Referrer-Policy y Permissions-Policy. No se realizaron intentos de contraseña ni modificaciones de usuarios, ventas o productos durante esas consultas. Esta comprobación no demuestra que todas las rutas y controles de la cuenta estén auditados.
 
 ## Rendimiento y capacidad comprobados
 
@@ -73,7 +78,7 @@ Las pruebas centrales conservan la réplica de más de 2 MB y 7,000 productos, e
 ## Riesgos residuales y aceptación de despliegue
 
 1. **Datos en disco:** cifrar el disco del equipo y el medio externo con una solución del sistema operativo, proteger la cuenta de Windows y resguardar las claves de recuperación fuera del equipo. No guardar respaldos JSON en servicios/carpetas compartidas sin protección. No se afirma que el archivo sea cifrado por tener SHA-256: la huella solo verifica integridad accidental.
-2. **Publicación real:** verificar HTTPS, cabeceras, cuentas, cierre de sesión y recepción de la sucursal en el dominio real después de actualizar. Activar MFA en la cuenta de Cloudflare y GitHub; no reutilizar la contraseña de prueba `12345678`. No se cambiaron ni inspeccionaron esas opciones privadas en esta evaluación.
+2. **Publicación real:** HTTPS/cabeceras y rechazo anónimo se comprobaron en el sitio de pruebas indicado. Quedan por verificar con el propietario el inicio/cierre de sesión legítimo y la recepción de su sucursal; activar MFA en las cuentas de Cloudflare y GitHub y no reutilizar la contraseña de prueba `12345678`. No se cambiaron ni inspeccionaron esas opciones privadas de las cuentas en esta evaluación. Otros clientes y dominios requieren su propia comprobación.
 3. **Disponibilidad:** internet, disco, energía, impresora y dispositivo antiguo requieren piloto. Una prueba finita no demuestra escalabilidad sin límites. Documentos de sincronización tienen límite de 16 MB y la nube conserva sus cuotas y tiempos máximos. Mantener aviso de datos pendientes y respaldo restaurable fuera del equipo.
 4. **Autenticación del personal:** usar contraseñas únicas y largas; los PIN cortos y una sesión Windows compartida tienen riesgo residual. Esta versión no incorpora MFA dentro del POS ni convierte un sistema operativo comprometido en seguro.
 5. **Verificación externa:** quedan fuera la auditoría independiente, certificación contractual, pruebas destructivas de la cuenta publicada, ataque distribuido, cifrado/configuración real de la computadora de caja y validación fiscal real con PAC.

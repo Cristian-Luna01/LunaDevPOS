@@ -57,3 +57,10 @@ test('consultar un local no descarga ni procesa el inventario de los demás',asy
  const own=await worker.fetch(req('summary?branch='+a.id,null,cookie),env);assert.equal(own.status,200);assert.equal((await own.json()).products.length,1);
  assert.equal((await worker.fetch(req('summary',null,cookie),env)).status,400);
 });
+test('intentos de acceso concurrentes no eluden el contador de bloqueo',async()=>{
+ const env=environment();
+ const responses=await Promise.all(Array.from({length:12},()=>worker.fetch(req('login',{email:env.OWNER_EMAIL,secret:'wrong'}),env)));
+ assert.ok(responses.every(r=>[401,429].includes(r.status)));
+ const attempt=env.sqlite.prepare('SELECT * FROM attempts').get();assert.ok(attempt.failures>=5);assert.ok(attempt.until_at>Date.now());
+ assert.equal((await worker.fetch(req('login',{email:env.OWNER_EMAIL,secret}),env)).status,429);
+});
