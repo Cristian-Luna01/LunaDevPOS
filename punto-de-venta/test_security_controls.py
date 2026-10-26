@@ -47,8 +47,9 @@ class SecurityControls(unittest.TestCase):
             with self.assertRaises(HTTPError) as e:self.request(path)
             self.assertIn(e.exception.code,(401,403,404));e.exception.close()
     def test_utf16_xml_entity_is_rejected_before_processing(self):
-        raw='<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE x [<!ENTITY e "malicious">]><x>&e;</x>'.encode('utf-16')
-        with self.assertRaises(Error):verify_xml(raw,{}, {})
+        for declaration in ['<!DOCTYPE x [<!ENTITY e "malicious">]>','<!DOCTYPE x>']:
+            raw=('<?xml version="1.0" encoding="UTF-16"?>'+declaration+'<c:Comprobante xmlns:c="http://www.sat.gob.mx/cfd/4" Version="4.0" TipoDeComprobante="I"/>').encode('utf-16')
+            with self.assertRaisesRegex(Error,'XML fiscal ilegible|declaraciones'):verify_xml(raw,{}, {})
 
 class ConnectionCapacity(unittest.TestCase):
     def test_capacity_rejects_excess_then_recovers(self):

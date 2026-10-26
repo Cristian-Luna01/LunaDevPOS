@@ -11,7 +11,7 @@ from billing_provider import FacturamaSandbox,ProviderError
 CFDI='{http://www.sat.gob.mx/cfd/4}';TFD='{http://www.sat.gob.mx/TimbreFiscalDigital}'
 def verify_xml(raw,document,cfg,response_uuid=None):
     if b'<!DOCTYPE' in raw.upper() or b'<!ENTITY' in raw.upper():raise Error('XML con declaraciones no permitidas')
-    try:root=ET.fromstring(raw)
+    try:root=ET.fromstring(raw,forbid_dtd=True)
     except (ET.ParseError,DefusedXmlException):raise Error('XML fiscal ilegible o con declaraciones no permitidas')
     if root.tag!=CFDI+'Comprobante' or root.get('Version')!='4.0' or root.get('TipoDeComprobante')!=document['kind']:raise Error('El XML no corresponde al CFDI 4.0 solicitado')
     body=load(document['payload_json']);emitter=root.find(CFDI+'Emisor');recipient=root.find(CFDI+'Receptor');stamp=root.find('.//'+TFD+'TimbreFiscalDigital')
@@ -134,7 +134,7 @@ class BillingService:
                     try:
                         raw=base64.b64decode(ack,validate=True)
                         if b'<!DOCTYPE' in raw.upper() or b'<!ENTITY' in raw.upper():raise ValueError()
-                        root=ET.fromstring(raw)
+                        root=ET.fromstring(raw,forbid_dtd=True)
                         values=[str(v).lower() for node in root.iter() for v in list(node.attrib.values())+[node.text or '']]
                         if not any(doc['uuid'] in value for value in values):raise ValueError()
                     except Exception:raise Error('Acuse de cancelación ilegible')
