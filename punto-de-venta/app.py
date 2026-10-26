@@ -5,7 +5,8 @@ import datetime as dt
 import getpass
 import hashlib
 from http.cookies import SimpleCookie
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from http_limits import ThreadingHTTPServer
 import json
 import logging
 import socket
@@ -13,7 +14,7 @@ import time
 import os
 import sqlite3
 from urllib.parse import urlparse, parse_qs
-from core import POS, Error, PERMISSIONS, ROOT, required, integer, rounded
+from core import POS, Error, PERMISSIONS, ROOT, required, credential, integer, rounded
 import inventory_io
 import analytics
 import profit
@@ -46,6 +47,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         self.send_header('Referrer-Policy','no-referrer')
+        self.send_header('X-Frame-Options','DENY')
+        self.send_header('Permissions-Policy','camera=(), microphone=(), geolocation=()')
         if filename:
             self.send_header('Content-Disposition',f'attachment; filename="{filename}"')
         if cookie:
@@ -147,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.direction(pos,path,data,write)
             cookie_name=f'pos_session_{self.server.server_port}'
             if write and path=='/api/login':
-                token = pos.login(required(data,'username'),required(data,'secret'))
+                token = pos.login(required(data,'username'),credential(data))
                 return self.send(200,{'ok':True},cookie=f'{cookie_name}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200')
             cookies = SimpleCookie(self.headers.get('Cookie',''))
             token = cookies[cookie_name].value if cookie_name in cookies else ''
@@ -291,7 +294,7 @@ class Handler(BaseHTTPRequestHandler):
         """Sesión independiente: la cookie del mostrador no abre Dirección."""
         cookie_name=f'direction_session_{self.server.server_port}'
         if write and path=='/direccion/api/login':
-            token=pos.login(required(data,'username'),required(data,'secret'))
+            token=pos.login(required(data,'username'),credential(data))
             uid=pos.session_user(token)
             try:
                 with pos.db() as db:

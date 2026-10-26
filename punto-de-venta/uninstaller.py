@@ -17,7 +17,7 @@ def main():
   test.mkdir(parents=True);base=test/'Local';data=lifecycle.known_data(base)[0];data.mkdir(parents=True);pos=POS(data/'pos.sqlite3');pos.initialize('qa','qa-test-password')
   program=lifecycle.known_programs(base)[0];program.mkdir(parents=True);(program/'qa.txt').write_text('QA')
   lifecycle.uninstall(True,test/'respaldo',base,registry=False)
-  assert not program.exists() and not data.exists() and list((test/'respaldo').rglob('*.botica.json'))
+  if program.exists() or data.exists() or not list((test/'respaldo').rglob('*.botica.json')):raise RuntimeError('La desinstalación de prueba no conservó los datos correctamente')
   (test/'resultado.json').write_text(json.dumps({'ok':True,'data_archived':True,'program_removed':True}));return
  if getattr(sys,'frozen',False) and '--temporary' not in sys.argv:
   current=Path(sys.executable).resolve()

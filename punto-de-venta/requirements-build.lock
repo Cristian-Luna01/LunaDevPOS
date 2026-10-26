@@ -1,5 +1,8 @@
-# Windows / Python 3.12; entorno usado para esta entrega.
--r requirements-build.txt
+# Windows x64 / Python 3.14.10; motor oficial con correcciones de seguridad.
+PySide6==6.12.0
+openpyxl==3.1.5
+defusedxml==0.7.1
+PyInstaller==6.22.3
 PySide6_WebEngine==6.12.0.140
 PySide6_Pdf==6.12.0.140
 shiboken6==6.12.0
@@ -10,5 +13,5 @@ packaging==26.3
 pefile==2024.8.26
 pyinstaller-hooks-contrib==2026.8
 pywin32-ctypes==0.2.3
-setuptools==84.0.0
+setuptools==84.1.0
 et-xmlfile==2.0.0

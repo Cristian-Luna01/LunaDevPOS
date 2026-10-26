@@ -1,6 +1,6 @@
 # Receta vigente de distribución
 
-Windows x64, Python 3.12. En un entorno virtual limpio instala `punto-de-venta/requirements-build.lock`, ejecuta `herramientas/Preparar-conector.ps1` para verificar el conector oficial y luego `python herramientas/Compilar.py --output dist`. La receta construye LunaDevPOS.spec, Desinstalar-LunaDevPOS.spec e Instalar-LunaDevPOS.spec; prepara el contenido, copia avisos de dependencias y genera SHA256.json. El repositorio no incluye bases, claves ni binarios compilados.
+Windows x64, Python oficial 3.14.10. En un entorno virtual limpio instala `punto-de-venta/requirements-build.lock`, ejecuta `herramientas/Preparar-conector.ps1` para verificar el conector oficial y luego `python herramientas/Compilar.py --output dist`. La receta construye LunaDevPOS.spec, Desinstalar-LunaDevPOS.spec e Instalar-LunaDevPOS.spec; prepara el contenido, copia avisos de dependencias, identifica versiones del motor y genera SHA256.json. El repositorio no incluye bases, claves ni binarios compilados. No reutilices el motor anterior al reconstruir esta entrega.
 
 Los demás .spec son recetas históricas conservadas para trazabilidad; no son entradas de compilación para esta versión. No se cambia su arquitectura ni se presenta el ejecutable x64 como compatible con Windows de 32 bits.
 

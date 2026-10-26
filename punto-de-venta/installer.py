@@ -57,7 +57,8 @@ def install(target=TARGET, shortcut=True):
         script="$taskShell=New-Object -ComObject WScript.Shell\n$taskLink=$taskShell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'LunaDev POS.lnk'))\n$taskLink.TargetPath="+quote(executable)+"\n$taskLink.WorkingDirectory="+quote(target)+"\n$taskLink.Save()"
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'shortcut.ps1';path.write_text(script,encoding='utf-8-sig')
-            subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(path)],check=True,creationflags=subprocess.CREATE_NO_WINDOW)
+            powershell=Path(os.environ['SystemRoot'])/'System32'/'WindowsPowerShell'/'v1.0'/'powershell.exe'
+            subprocess.run([str(powershell),'-NoProfile','-ExecutionPolicy','Bypass','-File',str(path)],check=True,creationflags=subprocess.CREATE_NO_WINDOW)
         from lifecycle import register
         register(target)
     return executable

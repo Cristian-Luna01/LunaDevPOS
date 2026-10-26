@@ -18,6 +18,11 @@ async function body(r){
  return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
 }
 async function owner(r,env){const token=(r.headers.get('Cookie')||'').match(/(?:^|;\s*)central_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(!token)return false;return !!await env.DB.prepare('SELECT 1 FROM sessions WHERE token_hash=? AND expires>?').bind(await hash(token),Date.now()).first();}
+async function selectedRows(DB,id){
+ const query=DB.prepare(id==='all'?'SELECT id,name,active,revision,received_at,payload FROM branches WHERE active=1 ORDER BY name':'SELECT id,name,active,revision,received_at,payload FROM branches WHERE active=1 AND id=? ORDER BY name');
+ const {results}=await (id==='all'?query:query.bind(id)).all();
+ return selectBranches(await hydrateBranches(DB,results),id);
+}
 const worker={async scheduled(event,env,ctx){ctx.waitUntil(Promise.all([cleanup(env.DB),cleanupDocuments(env.DB)]));},async fetch(r,env,ctx){
  const u=new URL(r.url),path=u.pathname.replace(/^\/direccion\/api\//,'/api/').replace(/^\/business-settings$/,'/api/business-settings').replace(/^\/business-logo.png$/,'/api/business-logo.png');
  try{
@@ -30,8 +35,10 @@ const worker={async scheduled(event,env,ctx){ctx.waitUntil(Promise.all([cleanup(
    if(attempt?.until_at>now)return json({error:'Demasiados intentos. Espera 15 minutos.'},429);
    const p=await body(r);
    if(typeof p.secret!=='string'||p.secret.length>200||(p.email||p.username)?.toLowerCase()!==env.OWNER_EMAIL.toLowerCase()||await hash(p.secret)!==env.OWNER_PASSWORD_SHA256){
-    const failures=(attempt&&attempt.until_at>now-900000?attempt.failures:0)+1;
-    await env.DB.prepare('INSERT INTO attempts(key,failures,until_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET failures=excluded.failures,until_at=excluded.until_at').bind(address,failures,now+(failures>=5?900000:0)).run();return json({error:'Correo o clave incorrectos'},401);
+    // El incremento es atómico: peticiones paralelas no pierden intentos leídos a la vez.
+    await env.DB.prepare(`INSERT INTO attempts(key,failures,until_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET
+     failures=CASE WHEN attempts.until_at>? THEN attempts.failures+1 ELSE 1 END,
+     until_at=CASE WHEN attempts.until_at>? THEN attempts.until_at WHEN attempts.until_at>? AND attempts.failures>=4 THEN ? ELSE ? END`).bind(address,now,now-900000,now,now-900000,now+900000,now).run();return json({error:'Correo o clave incorrectos'},401);
    }
    const token=key();await env.DB.batch([env.DB.prepare('DELETE FROM attempts WHERE key=?').bind(address),env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('INSERT INTO sessions VALUES(?,?)').bind(await hash(token),now+43200000)]);
    return json({ok:true},200,{'Set-Cookie':`central_session=${token}; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`});
@@ -76,12 +83,12 @@ const worker={async scheduled(event,env,ctx){ctx.waitUntil(Promise.all([cleanup(
   }
   if(!await owner(r,env))return json({error:'Inicia sesión con la cuenta del dueño'},401);
   if(['/api/business-settings','/api/business-logo.png'].includes(path)&&r.method==='GET'){
-   const {results}=await env.DB.prepare('SELECT id,name,payload FROM branches WHERE active=1 ORDER BY name').all(),rows=selectBranches(await hydrateBranches(env.DB,results),u.searchParams.get('branch')||'all'),settings=rows.find(b=>b.snapshot?.direction)?.snapshot.direction.settings||{name:'Dirección',receipt_footer:'',has_logo:false};
+   const rows=await selectedRows(env.DB,u.searchParams.get('branch')||'all'),settings=rows.find(b=>b.snapshot?.direction)?.snapshot.direction.settings||{name:'Dirección',receipt_footer:'',has_logo:false};
    if(path.endsWith('.png')){if(!settings.logo_base64)return json({error:'Sin logotipo'},404);return new Response(Uint8Array.from(atob(settings.logo_base64),c=>c.charCodeAt(0)),{headers:{'Content-Type':'image/png','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}
    return json({name:settings.name,receipt_footer:settings.receipt_footer,has_logo:settings.has_logo});
   }
   if(['/api/summary','/api/history','/api/history.csv','/api/history.xlsx','/api/metrics','/api/inventory-adjustments'].includes(path)&&r.method==='GET'){
-   const {results}=await env.DB.prepare('SELECT id,name,received_at,payload FROM branches WHERE active=1 ORDER BY name').all(),all=u.searchParams.get('branch')||'all',rows=selectBranches(await hydrateBranches(env.DB,results),all);
+   const all=u.searchParams.get('branch')||'all',rows=await selectedRows(env.DB,all);
    if(path==='/api/summary')return json(summary(rows,'Administrador',all==='all'));
    let result;try{result=await history(env.DB,rows,u.searchParams.get('from'),u.searchParams.get('to'),all==='all',path==='/api/metrics');}catch(e){return json({error:e.message.startsWith('Sin información posterior')?e.message:'El historial de los locales seleccionados todavía se está sincronizando. Comprueba la conexión de cada punto de venta y actualiza en unos segundos.'},503);}
    if(path==='/api/inventory-adjustments')return json({from:result.from,to:result.to,...result.inventory_adjustments,detail_coverage:result.detail_coverage});
@@ -111,4 +118,17 @@ const worker={async scheduled(event,env,ctx){ctx.waitUntil(Promise.all([cleanup(
  }catch(e){return json({error:e instanceof SyntaxError?'Solicitud inválida':'No se pudo procesar la solicitud. Revisa los datos y la configuración.'},400);}
 }};
 
+const dispatch=worker.fetch.bind(worker);
+worker.fetch=async(r,env,ctx)=>{
+ const url=new URL(r.url);
+ if(url.protocol!=='https:'){url.protocol='https:';return new Response(null,{status:308,headers:{Location:url.href,'Cache-Control':'no-store'}});}
+ const response=await dispatch(r,env,ctx),headers=new Headers(response.headers);
+ headers.set('Strict-Transport-Security','max-age=31536000');
+ headers.set('X-Content-Type-Options','nosniff');
+ headers.set('Referrer-Policy','no-referrer');
+ headers.set('X-Frame-Options','DENY');
+ headers.set('Permissions-Policy','camera=(), microphone=(), geolocation=()');
+ headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+ return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+};
 export default worker;

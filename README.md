@@ -2,7 +2,9 @@
 
 Punto de venta de escritorio para Windows, con inventario local, caja y consulta central para el dueño de uno o varios establecimientos.
 
-**Versión preparada: 0.2.0-rc.1 · pruebas controladas · 21 de octubre de 2026.**
+**Versión preparada: 0.2.0-rc.2 · pruebas controladas · 26 de octubre de 2026.**
+
+Esta entrega incorpora la [evaluación interna de seguridad y capacidad](docs/seguridad/AUDITORIA-2026-10-26.md). Incluye alcance, pruebas, hallazgos y requisitos de despliegue pendientes; no constituye certificación ni garantía de ausencia de errores. Ver también [SECURITY.md](SECURITY.md).
 
 Para actualizar, consulta [la guía de actualización](docs/GUIA-ACTUALIZACION-0.2.md): publica primero el panel central y después instala el punto de venta. Conserva un respaldo completo anterior a la actualización. La facturación permanece en pruebas; la emisión real requiere configurar y validar el proveedor fiscal.
 
@@ -42,7 +44,7 @@ CHANGELOG.md            Cambios por versión
 
 ## Ejecutar desde código
 
-Con Python 3.12 de 64 bits, dentro de `punto-de-venta`:
+Con Python 3.14.10 de 64 bits, dentro de `punto-de-venta`:
 
 ```powershell
 python -m pip install -r requirements-desktop.txt
