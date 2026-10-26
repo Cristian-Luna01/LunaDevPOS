@@ -1,6 +1,8 @@
-# Actualizar LunaDev POS a 0.2.0-rc.1
+# Actualizar LunaDev POS a 0.2.0-rc.2
 
 Esta entrega corrige permisos, reintentos, cortes cerrados, transporte de documentos grandes y respaldos externos. Es una candidata para validación operativa; no afirma ausencia absoluta de errores ni habilita facturación fiscal real.
+
+La revisión del 26 de octubre añade motor Python 3.14.10, dependencias corregidas, XML endurecido, límites de conexiones y cabeceras HTTPS del panel. No cambia el esquema 11 ni borra datos. Conserva los permisos y las funciones de negocio. Revisa el informe AUDITORIA-SEGURIDAD.md de la entrega: el cifrado del disco y de medios de respaldo, las cuentas de Windows/Cloudflare y la configuración real de publicación siguen siendo requisitos de instalación; la base y los JSON no se cifran por la aplicación.
 
 1. Termina los turnos, exporta un respaldo completo desde Mantenimiento y guárdalo fuera del equipo. Conserva también el instalador anterior.
 2. Actualiza PRIMERO la página central: copia el contenido del asistente nuevo sobre tu carpeta de publicación existente. Conserva CONFIGURADO.json, wrangler.json, .config-cloudflare y DATOS-PRIVADOS. Conserva node_modules o ejecuta npm ci. Ejecuta Actualizar-pagina.cmd en esa misma carpeta. Aplica una migración aditiva; no crea otra cuenta, base ni enlace.

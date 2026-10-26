@@ -40,3 +40,4 @@ outputs/
 *.cer
 *.sqlite
 *.sqlite-*
+gitleaks-report.json

@@ -1,0 +1,4 @@
+# UUIDs de idempotencia en ejemplos de API y fixture; no autentican ni dan acceso.
+7817d0d778bfe844e93fe571386717835a0b951a:punto-de-venta/API.md:generic-api-key:76
+7817d0d778bfe844e93fe571386717835a0b951a:punto-de-venta/API.md:generic-api-key:138
+7817d0d778bfe844e93fe571386717835a0b951a:punto-de-venta/test_cash_basis.py:generic-api-key:26

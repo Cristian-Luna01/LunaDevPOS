@@ -44,7 +44,14 @@ def required(data, key):
 def rounded(n, d):
     return (n + d // 2) // d
 
+def credential(data):
+    value=data.get('secret')
+    if not isinstance(value,str) or not value or len(value)>500:
+        raise Error('Contraseña inválida: utiliza entre 1 y 500 caracteres')
+    return value
+
 def password_hash(secret):
+    credential({'secret':secret})
     salt = secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac('sha256', secret.encode(), salt.encode(), 310000).hex()
     return f'{salt}${digest}'
@@ -119,6 +126,8 @@ class POS:
                    (uid, action, entity, json.dumps(details, ensure_ascii=False)))
 
     def login(self, username, secret):
+        if not isinstance(username,str) or not 1<=len(username.strip())<=50:raise Error('Usuario inválido')
+        credential({'secret':secret})
         username = username.strip().lower()
         now = int(time.time())
         denied = False

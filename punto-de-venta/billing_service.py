@@ -1,7 +1,8 @@
 """Timbrado fuera del bloqueo del mostrador; resultados ambiguos nunca se duplican."""
 import base64,json,queue,threading,re,datetime as dt
 from decimal import Decimal
-from xml.etree import ElementTree as ET
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 from core import Error,integer
 from local_secret import reveal
 from billing_math import load,dump
@@ -11,7 +12,7 @@ CFDI='{http://www.sat.gob.mx/cfd/4}';TFD='{http://www.sat.gob.mx/TimbreFiscalDig
 def verify_xml(raw,document,cfg,response_uuid=None):
     if b'<!DOCTYPE' in raw.upper() or b'<!ENTITY' in raw.upper():raise Error('XML con declaraciones no permitidas')
     try:root=ET.fromstring(raw)
-    except ET.ParseError:raise Error('XML fiscal ilegible')
+    except (ET.ParseError,DefusedXmlException):raise Error('XML fiscal ilegible o con declaraciones no permitidas')
     if root.tag!=CFDI+'Comprobante' or root.get('Version')!='4.0' or root.get('TipoDeComprobante')!=document['kind']:raise Error('El XML no corresponde al CFDI 4.0 solicitado')
     body=load(document['payload_json']);emitter=root.find(CFDI+'Emisor');recipient=root.find(CFDI+'Receptor');stamp=root.find('.//'+TFD+'TimbreFiscalDigital')
     if emitter is None or recipient is None or stamp is None:raise Error('El XML no contiene emisor, receptor o timbre')

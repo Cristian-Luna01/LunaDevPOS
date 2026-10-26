@@ -1,5 +1,15 @@
 # Historial de versiones
 
+## 0.2.0-rc.2 — 2026-10-26
+
+- Evaluación interna documentada con referencias ASVS, WSTG y SSDF; pruebas adversarias y de carga reproducibles.
+- Dependencias de publicación corregidas y fijadas; setuptools 84.1.0 y motor oficial Python 3.14.10.
+- Parser XML fiscal defusedxml, límite de conexiones del servidor y tiempo de espera del puente.
+- HTTPS/HSTS y cabeceras centrales; login conserva los caracteres exactos de la contraseña.
+- Selección de sucursal antes de hidratar inventarios; evita procesar locales no seleccionados.
+- Controles automatizados de dependencias, historial de secretos y hallazgos estáticos revisados.
+- Se documentan los límites de certificación, capacidad y protección de datos en el despliegue.
+
 ## 0.2.0-rc.1 — 2026-10-21
 
 - Historial general protegido por el permiso de reportes, conservando la consulta de tickets propios.

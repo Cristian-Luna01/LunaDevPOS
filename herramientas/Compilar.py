@@ -2,6 +2,7 @@
 import argparse,hashlib,importlib.metadata as metadata,json,os,shutil,ssl,subprocess,sys,zipfile
 from pathlib import Path
 root=Path(__file__).resolve().parent.parent;source=root/'punto-de-venta'
+if sys.version_info[:3]!=(3,14,10):raise SystemExit('Compila con Python oficial 3.14.10 y requirements-build.lock; no reutilices el motor anterior.')
 parser=argparse.ArgumentParser();parser.add_argument('--output',default=str(root/'dist'));args=parser.parse_args();output=Path(args.output).resolve();output.mkdir(parents=True,exist_ok=True)
 for name,version in [('PySide6','6.12.0'),('PyInstaller','6.22.3'),('openpyxl','3.1.5')]:
     if metadata.version(name)!=version:raise SystemExit('Instala requirements-build.lock en un entorno limpio: '+name)
@@ -26,6 +27,11 @@ for name in ['PySide6','PySide6_Essentials','PySide6_Addons','PySide6_WebEngine'
         if 'license' in str(file).lower() and dist.locate_file(file).is_file():
             target=licenses/name/str(file);target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(dist.locate_file(file),target)
 (licenses/'components.json').write_text(json.dumps(components,indent=2),encoding='utf-8')
+python_license=Path(sys.base_prefix)/'LICENSE.txt'
+if python_license.is_file():shutil.copy2(python_license,licenses/'Python-LICENSE.txt')
+from PySide6.QtCore import qVersion
+from PySide6.QtWebEngineCore import qWebEngineChromiumVersion,qWebEngineChromiumSecurityPatchVersion
+(licenses/'runtime.json').write_text(json.dumps({'python':sys.version,'openssl':ssl.OPENSSL_VERSION,'qt':qVersion(),'chromium':qWebEngineChromiumVersion(),'chromium_security':qWebEngineChromiumSecurityPatchVersion()},indent=2),encoding='utf-8')
 shutil.copy2(root/'docs/GUIA-ACTUALIZACION-0.2.md',program/'GUIA-ACTUALIZACION.md')
 assert not any(program.rglob('*.sqlite3')) and not any(program.rglob('*.db'))
 for path in (source/'static').iterdir():

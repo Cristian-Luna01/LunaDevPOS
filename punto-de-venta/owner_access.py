@@ -1,5 +1,6 @@
 """Acceso temporal protegido por correo. Solo publica Dirección de consulta."""
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from http_limits import ThreadingHTTPServer
 from urllib.parse import urlsplit
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError
@@ -24,6 +25,9 @@ def local_addresses():
     return sorted(a for a in addresses if private_address(a) and not a.startswith('127.'))
 
 class BridgeHandler(BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(10)
     def log_message(self,*args):pass
     def do_GET(self):self.forward(False)
     def do_POST(self):self.forward(True)

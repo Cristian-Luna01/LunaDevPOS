@@ -24,3 +24,36 @@ test('resumen histórico recibido, reintentos y CSV de detalle protegido',async(
  assert.equal((await worker.fetch(req('history.csv?from='+day+'&to='+day+'&summary=1',null,cookie),env)).status,200);
  assert.equal((await worker.fetch(req('history.xlsx?from='+day+'&to='+day,null,cookie),env)).status,200);
 });
+
+test('HTTPS y cabeceras de seguridad también protegen respuestas de rechazo',async()=>{
+ const env=environment();const redirect=await worker.fetch(new Request('http://qa.workers.dev/api/branches'),env);
+ assert.equal(redirect.status,308);assert.equal(redirect.headers.get('Location'),origin+'/api/branches');
+ const r=await worker.fetch(req('branches'),env);assert.equal(r.status,401);
+ assert.equal(r.headers.get('Strict-Transport-Security'),'max-age=31536000');assert.equal(r.headers.get('X-Frame-Options'),'DENY');
+ assert.equal(r.headers.get('X-Content-Type-Options'),'nosniff');assert.match(r.headers.get('Content-Security-Policy'),/frame-ancestors 'none'/);
+});
+test('sesión inventada o vencida no permite leer datos ni administrar sucursales',async()=>{
+ const env=environment();
+ for(const path of ['summary','history','metrics','branches','inventory-adjustments'])assert.equal((await worker.fetch(req(path,null,'central_session='+'a'.repeat(64)),env)).status,401);
+ const r=await worker.fetch(req('login',{email:env.OWNER_EMAIL,secret}),env),header=r.headers.get('Set-Cookie');
+ for(const flag of ['Secure','HttpOnly','SameSite=Strict'])assert.ok(header.includes(flag));
+ env.sqlite.prepare('UPDATE sessions SET expires=0').run();const cookie=header.split(';')[0];
+ assert.equal((await worker.fetch(req('branches',{name:'Intruso'},cookie),env)).status,401);
+ assert.equal(env.sqlite.prepare('SELECT count(*) n FROM branches').get().n,0);
+});
+test('falta de configuración, credenciales SQL y cuerpos enormes fallan cerrados',async()=>{
+ const env=environment();assert.equal((await worker.fetch(req('branches'),{...env,OWNER_PASSWORD_SHA256:''})).status,503);
+ assert.equal((await worker.fetch(req('login',{email:"' OR 1=1 --",secret:'wrong'}),env)).status,401);
+ assert.equal(env.sqlite.prepare('SELECT count(*) n FROM sessions').get().n,0);
+ const tooBig=req('login',{email:env.OWNER_EMAIL,secret:'x'.repeat(910000)});assert.equal((await worker.fetch(tooBig,env)).status,400);
+ assert.equal(env.sqlite.prepare('SELECT count(*) n FROM sessions').get().n,0);
+});
+test('consultar un local no descarga ni procesa el inventario de los demás',async()=>{
+ const env=environment(),login=await worker.fetch(req('login',{email:env.OWNER_EMAIL,secret}),env),cookie=login.headers.get('Set-Cookie').split(';')[0];
+ const a=await(await worker.fetch(req('branches',{name:'A'},cookie),env)).json(),b=await(await worker.fetch(req('branches',{name:'B'},cookie),env)).json();
+ const p=payload();p.version=2;p.direction={day:p.today,products:p.products,shifts:[],suppliers:[],history_days:[],history_fingerprints:{}};
+ assert.equal((await worker.fetch(req('snapshot',p,'',a.token),env)).status,200);
+ env.sqlite.prepare('UPDATE branches SET payload=? WHERE id=?').run('invalid-json',b.id);
+ const own=await worker.fetch(req('summary?branch='+a.id,null,cookie),env);assert.equal(own.status,200);assert.equal((await own.json()).products.length,1);
+ assert.equal((await worker.fetch(req('summary',null,cookie),env)).status,400);
+});
