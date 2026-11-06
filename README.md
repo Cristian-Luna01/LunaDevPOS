@@ -1,75 +1,57 @@
-# LunaDev POS
+# LunaPOS
 
-Punto de venta de escritorio para Windows, con inventario local, caja y consulta central para el dueño de uno o varios establecimientos.
+Punto de venta para Windows con ventas, inventario por lotes, clientes, crédito, caja, historial, reportes y respaldos. Esta carpeta reúne el código mejorado y la aplicación compilada optimizada, versión **0.2.0-beta.1**.
 
-**Versión: 0.1.0-beta · pruebas controladas · 18 de octubre de 2026.**
+## Abrir el programa
 
-## Descargar e instalar
-
-[Ver versiones e instaladores](https://github.com/Cristian-Luna01/LunaDevPOS/releases)
-
-El instalador y el paquete con asistente y manual se distribuyen en **Releases**. Descarga el instalador `.exe`. Si necesitas publicar el panel, descarga también `Kit-Pagina-LunaDevPOS.zip` y extrae su contenido. El manual y `EMPIEZA-AQUI.txt` se ofrecen por separado. En Windows 10/11 de 64 bits el instalador incluye el motor necesario; la computadora de caja no necesita Python ni Node.js.
-
-Antes de actualizar una instalación existente, exporta un respaldo completo fuera de la computadora. La actualización conserva datos; una instalación nueva empieza sin inventario ni usuarios del negocio.
-
-## Funciones
-
-- Ventas en efectivo, tarjeta y transferencia; descuentos y promociones.
-- Clientes, créditos, abonos y cambio en efectivo.
-- Apertura y cierre de turnos; entradas y salidas de caja.
-- Inventario por lotes, recepciones, ajustes con motivo y valoración a costo de compra.
-- Historial, métricas, exportación a Excel/CSV y respaldos completos.
-- Consulta de tickets por fecha desde el mostrador, con detalle de productos, pago y cambio.
-- Usuarios y permisos configurables; identidad visual del negocio.
-- Panel central de consulta y selección de sucursales, manteniendo inventario y caja separados por local.
-
-La aplicación opera localmente; la consulta remota requiere internet y la publicación/configuración del servicio central. El panel no sustituye los respaldos completos de la computadora de caja.
+Haz doble clic en **Abrir LunaPOS**. No necesitas instalar Python ni Node para usar la aplicación compilada. Los datos están en `datos/` y los respaldos automáticos en `respaldos/`. Conserva la carpeta en su ubicación actual: el acceso directo guarda su ruta completa.
 
 ## Estructura
 
 ```text
-punto-de-venta/          Aplicación Python, SQLite, interfaz y pruebas
-pagina-administrador/   Cloudflare Worker, D1, interfaz y asistente de publicación
-docs/                   Manual y notas de actualización
-herramientas/           Script de pruebas y plantilla opcional para GitHub Actions
-VERSION                 Versión del repositorio
-CHANGELOG.md            Cambios por versión
+punto-de-venta/          Código Python, API, SQLite, interfaz y pruebas
+pagina-administrador/   Panel central, servicio Cloudflare y migraciones
+herramientas/           Compilación, verificación y desarrollo
+docs/                   Manual y guías técnicas
+.github/workflows/      Verificación automática para el código
+programa/               Aplicación optimizada lista para abrir
+datos/                  Datos privados y configuración del negocio
+respaldos/              Copias de recuperación
+Abrir LunaPOS.lnk       Acceso de uso diario
+GUIA.md                 Mejoras, uso y límites
+VERSION                 Versión del código
+CHANGELOG.md            Historial de versiones
+requirements-release.lock Dependencias exactas para compilar
 ```
 
-## Ejecutar desde código
+El original `LunaDevPOS` se conserva separado. Esta copia no incluye su historial `.git`; contiene las fuentes mejoradas. El código incorporado no sustituye ni restaura la base del negocio.
 
-Con Python 3.12 de 64 bits, dentro de `punto-de-venta`:
+## Mejoras conservadas
 
-```powershell
-python -m pip install -r requirements-desktop.txt
-python native_desktop.py --data-dir C:\LunaDevPOS-Pruebas
-```
+- Permisos del historial financiero y reportes Z congelados.
+- Registro durable de operaciones y recuperación sin duplicar ventas o movimientos.
+- Respaldos automáticos configurables y prueba de restauración.
+- Sincronización comprimida por partes con comprobación de integridad.
+- Índices de búsqueda e historial; formularios con selección por nombre/código.
+- Comprobación de impresora y escáner.
+- Compilación con versiones y hashes fijados y motor depurado: unos 467 MB.
 
-Usa una carpeta nueva para pruebas. `native_desktop.py` es la entrada del escritorio actual; algunos documentos históricos describen además el modo web local.
+## Desarrollar o ejecutar el código
 
-Para el servicio central se necesita Node.js LTS, dentro de `pagina-administrador`:
+Se requiere Python 3.12 de 64 bits. Instala las dependencias de `punto-de-venta/requirements-desktop.txt` en tu entorno de desarrollo. Para ejecutar el código puedes usar `herramientas/Ejecutar-codigo.cmd`: utiliza la misma carpeta `datos`, por lo que debes cerrar antes la aplicación compilada. Para pruebas aisladas ejecuta `native_desktop.py --data-dir` con una carpeta nueva.
 
-```powershell
-npm ci
-npm test
-```
+El conector remoto ya está incluido en `programa`. Para ejecutar las pruebas del conector o recompilar desde las fuentes, prepara su copia de desarrollo con `herramientas/Preparar-conector.ps1`; el ejecutable se descarga de su procedencia documentada y se valida por hash. No se duplica ese binario dentro de las fuentes por defecto.
 
-Para una publicación nueva usa `Crear-pagina.cmd`. Para actualizar un servicio existente conserva su carpeta configurada y usa `Actualizar-pagina.cmd`. No reemplaces sus credenciales ni sus identificadores. `wrangler.example.json` es una plantilla sin datos de la cuenta de pruebas.
+Consulta [compilación y operación](docs/COMPILACION-Y-OPERACION.md), [las mejoras](GUIA.md) y [el manual](docs/Manual-LunaDevPOS.html).
 
-## Calidad y límites conocidos
+## Panel central
 
-La última comprobación local aprobó 207 pruebas Python y 22 pruebas de interfaz/servicio central. La simulación acelerada de 183 días comprobó 14,640 compras con 749,726 comparaciones independientes sin discrepancias observadas. Estos resultados no garantizan ausencia de errores futuros ni sustituyen el piloto en el equipo real.
+La venta local funciona sin internet. La consulta remota requiere conexión y configurar/publicar el panel. Para desarrollar el servicio central utiliza Node y `npm ci` y `npm test` en `pagina-administrador`. La migración `0003_chunked_sync.sql` forma parte del servicio mejorado; no copies fuentes antiguas encima. Se conservan los asistentes `Crear-pagina.cmd` y `Actualizar-pagina.cmd`.
 
-- Facturación: entorno de pruebas; la emisión fiscal real no está habilitada como una función lista para producción.
-- Las devoluciones de ventas a crédito están bloqueadas y requieren resolver la deuda mediante un procedimiento específico.
-- La aplicación Windows publicada es de 64 bits; no se entrega compilación de 32 bits ni Android.
-- Las comisiones de tarjeta son estimaciones configurables, no una conciliación automática con la terminal bancaria.
-- En la nube el detalle antiguo se compacta; los datos locales y el respaldo completo siguen siendo necesarios.
+## Validación y límites
 
-## Versionado y distribución
+La versión mejorada se verificó anteriormente con 223 pruebas Python y 30 JavaScript. La depuración del motor pasó 32 pruebas Python y comprobaciones del ejecutable, ventas con recuperación tras recarga, edición de productos e impresión PDF. La impresión física, el escáner físico y una publicación real del panel requieren su comprobación en el equipo y servicio elegidos. La facturación sigue siendo un entorno de pruebas, no emisión fiscal habilitada.
 
-`main` conserva el código vigente. Cada entrega se identifica con una etiqueta; los instaladores se guardan en Releases, no dentro del historial de Git. La primera entrega se identifica como `v0.1.0-beta`.
+Los respaldos guardados en el mismo disco no protegen de una avería de ese disco. Conserva también copias fuera del equipo.
 
-No se incluyen bases de datos, cuentas reales, claves, dependencias ni compilaciones. El binario `cloudflared.exe` se obtiene de su fuente oficial mediante `herramientas/Preparar-conector.ps1`; su procedencia y licencia están en `punto-de-venta/vendor`. Se requiere para las pruebas del ciclo del conector remoto. Para recompilar el instalador se debe generar el payload `programa.zip`, que no está versionado.
-
-Consulta [el manual](docs/Manual-LunaDevPOS.html), [cómo contribuir](CONTRIBUTING.md) y [manejo de seguridad](SECURITY.md). No se ha otorgado una licencia de código abierto ni autorización general de reutilización comercial.
+Consulta [seguridad](SECURITY.md) y [contribución](CONTRIBUTING.md). Se conservan las condiciones de uso del proyecto original; esta copia no añade una licencia general de reutilización.

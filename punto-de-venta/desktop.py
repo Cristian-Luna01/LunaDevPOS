@@ -6,8 +6,6 @@ from pathlib import Path
 import sqlite3
 import sys
 import threading
-import tkinter as tk
-from tkinter import ttk, messagebox
 import webbrowser
 from contextlib import closing
 from core import POS, Error
@@ -65,6 +63,8 @@ def smoke_test(directory):
     Path(directory,'resultado.json').write_text(json.dumps({'ok':True,'empty_inventory':True,'resources':True}),encoding='utf-8')
 
 def main():
+    import tkinter as tk
+    from tkinter import ttk, messagebox
     parser=argparse.ArgumentParser();parser.add_argument('--data-dir');parser.add_argument('--self-test',action='store_true');args=parser.parse_args()
     directory=data_directory(args.data_dir);directory.mkdir(parents=True,exist_ok=True)
     if args.self_test:
@@ -120,4 +120,5 @@ if __name__=='__main__':
     try:main()
     except Exception as exc:
         if '--self-test' in sys.argv: raise
+        from tkinter import messagebox
         messagebox.showerror('No se pudo iniciar',str(exc))

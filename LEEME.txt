@@ -1,0 +1,11 @@
+LunaPOS
+
+Para trabajar, abre el acceso Abrir LunaPOS.
+
+programa: aplicación lista para usar.
+datos: información privada del negocio.
+respaldos: copias de recuperación.
+punto-de-venta, pagina-administrador, docs y herramientas: código, documentación y desarrollo. No necesitas abrirlos para registrar ventas.
+
+README.md explica la estructura completa. GUIA.md describe las mejoras.
+Conserva la carpeta en su ubicación actual para mantener válido el acceso directo.

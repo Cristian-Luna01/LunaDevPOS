@@ -5,9 +5,33 @@ const esc = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'
 const cents = value => { const s=(String(value??'0').trim()||'0'); if(!/^\d+(\.\d{1,2})?$/.test(s)) throw Error('Usa un importe positivo con hasta 2 decimales'); const [a,b='']=s.split('.'); const n=Number(a)*100+Number(b.padEnd(2,'0'));if(!Number.isSafeInteger(n))throw Error('Importe demasiado grande');return n; };
 let me, products=[], customers=[], cart=[], page=0, currentView='checkout', dialogCallback, busy=false, pendingSale=null, queryVersion=0, customerVersion=0;
 function notify(message){$('notice').textContent=message;$('notice').hidden=false;clearTimeout(notify.timer);notify.timer=setTimeout(()=>$('notice').hidden=true,6500);}
-async function api(path,data){const r=await fetch('/api'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-POS-Request':'1'}:{},body:data?JSON.stringify(data):undefined});const body=await r.json();if(!r.ok){if(r.status===401){$('workspace').hidden=true;$('login').hidden=false;}throw Error(body.error||'No se pudo completar la operación');}return body;}
+let movementRequestKeys=new Map();
+async function requestApi(path,data){
+ let movementSignature;
+ if(data&&['/cash','/inventory/receive'].includes(path)){
+  movementSignature=path+JSON.stringify(data);
+  if(!movementRequestKeys.has(movementSignature))movementRequestKeys.set(movementSignature,crypto.randomUUID());
+  data={...data,request_key:movementRequestKeys.get(movementSignature)};
+ }
+ const r=await fetch('/api'+path,{
+  method:data?'POST':'GET',
+  headers:data?{'Content-Type':'application/json','X-POS-Request':'1'}:{},
+  body:data?JSON.stringify(data):undefined
+ });
+ const body=await r.json();
+ if(r.ok&&movementSignature)movementRequestKeys.delete(movementSignature);
+ if(!r.ok){
+  if(r.status===401){$('workspace').hidden=true;$('login').hidden=false;}
+  throw Error(body.error||'No se pudo completar la operación');
+ }
+ return body;
+}
+async function api(path,data){
+ if(data&&typeof window!=='undefined'&&window.safeOperations?.paths.includes(path))return window.safeOperations.submit(path,data,requestApi);
+ return requestApi(path,data);
+}
 const act = fn => async (...args) => {try{await fn(...args);}catch(e){notify(e.message);}};
-async function refresh(requireOpening=false){me=await api('/me');await window.refreshCardFees?.();document.dispatchEvent(new CustomEvent('brand-permission',{detail:me.permissions.includes('users.manage')}));$('identity').textContent=me.user.display_name;$('shiftStatus').textContent=me.shift?(me.shift.shift_number?`Turno ${me.shift.shift_number}`:'Turno abierto'):'Sin turno abierto';$('gateAdmin').hidden=!me.permissions.includes('users.manage');$('openShift').disabled=!!me.shift;$('closeForm').hidden=!me.shift;document.querySelectorAll('[data-permission]').forEach(b=>b.hidden=!me.permissions.includes(b.dataset.permission));$('workspace').hidden=false;$('login').hidden=true;await Promise.all([searchProducts(),loadCustomers()]);if(requireOpening&&me.permissions.includes('sell')&&!me.shift)showShiftGate();}
+async function refresh(requireOpening=false){me=await api('/me');await window.refreshCardFees?.();document.dispatchEvent(new CustomEvent('brand-permission',{detail:me.permissions.includes('users.manage')}));$('identity').textContent=me.user.display_name;$('shiftStatus').textContent=me.shift?(me.shift.shift_number?`Turno ${me.shift.shift_number}`:'Turno abierto'):'Sin turno abierto';$('gateAdmin').hidden=!me.permissions.includes('users.manage');$('openShift').disabled=!!me.shift;$('closeForm').hidden=!me.shift;document.querySelectorAll('[data-permission]').forEach(b=>b.hidden=!me.permissions.includes(b.dataset.permission));$('workspace').hidden=false;$('login').hidden=true;await Promise.all([searchProducts(),loadCustomers()]);await window.safeOperations?.start(requestApi);if(requireOpening&&me.permissions.includes('sell')&&!me.shift)showShiftGate();}
 $('loginForm').onsubmit=act(async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));await api('/login',d);document.dispatchEvent(new CustomEvent('login-user-confirmed',{detail:d.username}));$('notice').hidden=true;e.target.reset();await refresh(true);});
 $('logout').onclick=act(async()=>{me=await api('/me');if(me?.shift){$('shiftGate').hidden=true;$('workspace').hidden=false;document.querySelector('[data-view="cash"]').click();notify('Antes de salir, cuenta el efectivo y confirma el cierre de turno.');$('closeForm').elements.counted.focus();return;}await api('/logout',{});$('shiftGate').hidden=true;cart=[];pendingSale=null;me=null;currentView='checkout';document.querySelectorAll('.view').forEach(v=>v.hidden=v.id!=='checkout');$('pageTitle').textContent='Mostrador';$('workspace').classList.add('checkout-mode');$('notice').hidden=true;renderCart();$('dialog').close();$('workspace').hidden=true;$('login').hidden=false;$('report').innerHTML='<h2>Resumen del corte</h2>';$('adminResult').replaceChildren();$('receipt').replaceChildren();});
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{if(b.dataset.view==='checkout'&&me?.permissions.includes('sell')&&!me.shift){showShiftGate();return;}currentView=b.dataset.view;document.querySelectorAll('.view').forEach(v=>v.hidden=v.id!==currentView);document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('selected',x===b));$('pageTitle').textContent=b.textContent;$('workspace').classList.toggle('checkout-mode',currentView==='checkout');});

@@ -9,6 +9,8 @@ from tkinter import ttk, messagebox
 import zipfile
 import shutil
 import uuid
+import hashlib
+import json
 
 PAYLOAD=Path(getattr(sys,'_MEIPASS',Path(__file__).parent))/'programa.zip'
 LEGACY=Path(os.environ['LOCALAPPDATA'])/'Programs'/'NuvariaPOSEscritorioPrueba'
@@ -34,6 +36,13 @@ def install(target=TARGET, shortcut=True):
         for item in archive.infolist():
             resolved=(stage/item.filename).resolve()
             if not resolved.is_relative_to(stage.resolve()):raise RuntimeError('Archivo de instalación inválido')
+        if 'payload-manifest.json' in archive.namelist():
+            manifest=json.loads(archive.read('payload-manifest.json'))
+            files=manifest.get('files')
+            if not isinstance(files,dict) or set(archive.namelist())-{'payload-manifest.json'}!=set(files):raise RuntimeError('Manifiesto de instalación inválido')
+            for name,expected in files.items():
+                with archive.open(name) as stream:
+                    if hashlib.file_digest(stream,'sha256').hexdigest()!=expected:raise RuntimeError('Archivo de instalación dañado: '+name)
         stage.mkdir(parents=True)
         archive.extractall(stage)
     if not ((stage/'LunaDevPOS.exe').exists() or (stage/'NuvariaPOSEscritorio.exe').exists()):raise RuntimeError('Instalación incompleta')
@@ -49,7 +58,9 @@ def install(target=TARGET, shortcut=True):
         try:shutil.rmtree(previous)
         except OSError:pass
     executable=target/('LunaDevPOS.exe' if (target/'LunaDevPOS.exe').exists() else 'NuvariaPOSEscritorio.exe')
-    (target/'instalacion.json').write_text('{"product":"LunaDev POS","version":"0.9.20261012"}',encoding='utf-8')
+    version_path=Path(getattr(sys,'_MEIPASS',Path(__file__).parent))/'VERSION'
+    version=version_path.read_text(encoding='utf-8').strip() if version_path.exists() else 'desarrollo'
+    (target/'instalacion.json').write_text(json.dumps({'product':'LunaDev POS','version':version}),encoding='utf-8')
     if shortcut:
         def quote(value):return "'"+str(value).replace("'","''")+"'"
         script="$taskShell=New-Object -ComObject WScript.Shell\n$taskLink=$taskShell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'LunaDev POS.lnk'))\n$taskLink.TargetPath="+quote(executable)+"\n$taskLink.WorkingDirectory="+quote(target)+"\n$taskLink.Save()"

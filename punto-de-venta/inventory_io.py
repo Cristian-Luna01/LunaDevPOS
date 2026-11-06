@@ -332,6 +332,8 @@ def restore(pos,uid,data):
         db.execute('PRAGMA defer_foreign_keys=ON')
         triggers=list(db.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger'"))
         for t in triggers:db.execute('DROP TRIGGER "'+t['name']+'"')
+        from pending_operations import reset
+        reset(db)
         db.execute('DELETE FROM sessions')
         db.execute('DELETE FROM login_attempts')
         for name in reversed(TABLES):db.execute('DELETE FROM '+name)
@@ -342,6 +344,8 @@ def restore(pos,uid,data):
             db.executemany('INSERT INTO '+name+'('+','.join('"'+c+'"' for c in columns)+') VALUES ('+','.join('?' for _ in columns)+')',
                 [tuple(r[c] for c in columns) for r in rows])
         for t in triggers:db.execute(t['sql'])
+        from performance import rebuild
+        rebuild(db)
         if db.execute('PRAGMA foreign_key_check').fetchone():
             raise Error('El respaldo contiene relaciones inconsistentes')
         if db.execute('PRAGMA integrity_check').fetchone()[0]!='ok':

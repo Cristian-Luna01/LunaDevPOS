@@ -10,7 +10,7 @@ from desktop import create_account, initialized, can_stop, smoke_test
 from iniciar import serve_available
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--data-dir');parser.add_argument('--self-test',action='store_true');parser.add_argument('--engine-check',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--data-dir');parser.add_argument('--self-test',action='store_true');parser.add_argument('--engine-check',action='store_true');parser.add_argument('--runtime-check');args=parser.parse_args()
     legacy=Path(os.environ['LOCALAPPDATA'])/'NuvariaPOSEscritorioPrueba'/'data'
     directory=Path(args.data_dir) if args.data_dir else legacy if (legacy/'pos.sqlite3').exists() else Path(os.environ['LOCALAPPDATA'])/'LunaDevPOS'/'data'
     directory.mkdir(parents=True,exist_ok=True)
@@ -22,6 +22,9 @@ def main():
     from PySide6.QtWebEngineCore import QWebEnginePage
     from PySide6.QtPrintSupport import QPrinter, QPrintDialog
     app=QApplication(sys.argv[:1]);app.setApplicationName('LunaDev POS');app.setStyleSheet('QWidget {font-family: Segoe UI; font-size:14px;} QPushButton {padding:10px; background:#126553; color:white; border-radius:6px;} QLineEdit,QComboBox {padding:8px;}')
+    if args.runtime_check:
+        from runtime_check import run
+        raise SystemExit(run(args.runtime_check,app))
     if args.engine_check:
         view=QWebEngineView();view.resize(800,600);QTimer.singleShot(1000,app.quit);app.exec();(directory/'motor-ok.txt').write_text('Qt WebEngine disponible',encoding='utf-8');return
     import msvcrt
@@ -50,6 +53,8 @@ def main():
         button.clicked.connect(submit)
         if setup.exec()!=QDialog.Accepted:lock.close();return
     server=serve_available(pos)
+    from external_backup import BackupService
+    server.external_backup=BackupService(pos);server.external_backup.start()
     (directory/'runtime.json').write_text(json.dumps({'port':server.server_port}),encoding='utf-8')
     from owner_access import OwnerAccess;server.owner_access=OwnerAccess(server)
     from branch_sync import BranchSync
@@ -115,6 +120,6 @@ def main():
     window.reload_shortcut=QShortcut(QKeySequence('Ctrl+R'),window);window.reload_shortcut.activated.connect(view.reload)
     window.show()
     try:app.exec()
-    finally:server.billing.stop();server.branch_sync.stop();server.owner_access.stop();server.shutdown();server.server_close();thread.join();lock.close()
+    finally:server.external_backup.stop();server.billing.stop();server.branch_sync.stop();server.owner_access.stop();server.shutdown();server.server_close();thread.join();lock.close()
 
 if __name__=='__main__':main()

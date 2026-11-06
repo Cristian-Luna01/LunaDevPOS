@@ -2,15 +2,24 @@
 from collections import defaultdict,deque
 
 def collections(db,start=None,end=None,shift_id=None):
+    from performance import utc_bounds
+    conditions=['amount_cents<0'];args=[]
+    if start is not None:
+        lower,upper=utc_bounds(start,end);conditions.extend(['created_at>=?','created_at<?']);args.extend([lower,upper])
+    if shift_id is not None:conditions.append('shift_id=?');args.append(shift_id)
+    selected_customers=[r[0] for r in db.execute('SELECT DISTINCT customer_id FROM customer_ledger WHERE '+' AND '.join(conditions),args)]
+    if not selected_customers:return []
+    # El historial previo de estos clientes es necesario para repartir sus abonos FIFO.
+    customer_filter='SELECT customer_id FROM customer_ledger WHERE '+' AND '.join(conditions)
     items=defaultdict(list)
-    for r in db.execute("""SELECT l.id charge_id,s.id ticket_id,s.status,i.id item_id,i.product_id,i.category_id,i.product_name name,p.barcode,i.quantity,i.total_cents,i.tax_cents,
+    for r in db.execute(f"""SELECT l.id charge_id,s.id ticket_id,s.status,i.id item_id,i.product_id,i.category_id,i.product_name name,p.barcode,i.quantity,i.total_cents,i.tax_cents,
       COALESCE((SELECT SUM(a.quantity*a.unit_cost_cents) FROM sale_item_batches a WHERE a.sale_item_id=i.id),0) cost_cents,
       COALESCE((SELECT SUM(a.quantity) FROM sale_item_batches a WHERE a.sale_item_id=i.id AND a.unit_cost_cents=0),0) zero_units
       FROM customer_ledger l JOIN sales s ON s.id=l.sale_id JOIN sale_items i ON i.sale_id=s.id JOIN products p ON p.id=i.product_id
-      WHERE l.amount_cents>0 ORDER BY l.id,i.id"""):
+      WHERE l.amount_cents>0 AND l.customer_id IN ({customer_filter}) ORDER BY l.id,i.id""",args):
         item=dict(r);item['paid']=0;items[r['charge_id']].append(item)
     queues=defaultdict(deque);result=[]
-    for row in db.execute("SELECT *,date(created_at,'localtime') day,datetime(created_at,'localtime') happened_at FROM customer_ledger ORDER BY id"):
+    for row in db.execute(f"SELECT *,date(created_at,'localtime') day,datetime(created_at,'localtime') happened_at FROM customer_ledger WHERE customer_id IN ({customer_filter}) ORDER BY id",args):
         queue=queues[row['customer_id']]
         if row['amount_cents']>0:
             queue.extend(items[row['id']]);continue

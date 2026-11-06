@@ -156,11 +156,9 @@ class POSTest(unittest.TestCase):
             self.assertEqual(e.exception.code,409)
             with urlopen(Request(base+'/api/me',headers={'Cookie':cookie})) as r:
                 self.assertEqual(json.load(r)['shift']['id'],sid)
-            with urlopen(Request(base+'/api/sales/history',headers={'Cookie':cookie})) as r:
-                history=json.load(r)
-                self.assertEqual(history['totals']['sales_cents'],0)
-                self.assertNotIn('profit_cents',history['totals'])
-                self.assertNotIn('cost_cents',history['totals'])
+            with self.assertRaises(HTTPError) as denied:
+                urlopen(Request(base+'/api/sales/history',headers={'Cookie':cookie}))
+            self.assertEqual(denied.exception.code,403)
             with urlopen(Request(base+'/api/products',headers={'Cookie':cookie})) as r:
                 self.assertNotIn('cost_cents',json.load(r)[0])
             with urlopen(Request(base+f'/api/inventory/availability?ids={self.pid}',headers={'Cookie':cookie})) as r:

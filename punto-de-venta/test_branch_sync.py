@@ -12,6 +12,18 @@ class BranchSyncTest(unittest.TestCase):
     tearDown=test_pos.POSTest.tearDown
     receive=test_pos.POSTest.receive
 
+    def test_unchanged_catalog_sends_heartbeat_instead_of_full_snapshot(self):
+        from unittest.mock import patch
+        sync=BranchSync(self.pos);sync.configure(dict(url='https://qa.workers.dev',name='Centro',token='c'*64))
+        paths=[]
+        def send(url,token,path,payload):
+            paths.append(path);return {'ok':True,'revision':payload['revision']}
+        with patch('sync_transport.send',side_effect=send):
+            sync.once();paths.clear();sync.once()
+            self.assertEqual(paths,['/api/heartbeat'])
+            self.pos.cash_movement(1,dict(direction='in',category='change',amount_cents=100,concept='Cambio'))
+            paths.clear();sync.once();self.assertEqual(paths[0],'/api/snapshot')
+
     def test_cash_credit_collection_uses_same_historical_cost(self):
         self.pos.sale(1,dict(request_key='paid',items=[dict(product_id=self.pid,quantity=1)],payments=[dict(method='cash',amount_cents=1160,tendered_cents=1160)]))
         self.pos.sale(1,dict(request_key='credit',customer_id=1,on_account=True,items=[dict(product_id=self.pid,quantity=1)],payments=[]))

@@ -1,5 +1,12 @@
 # Historial de versiones
 
+## 0.2.0-beta.1 — 2026-10-21
+
+- Mejoras de permisos, recuperación durable, idempotencia, respaldos, sincronización y rendimiento descritas en GUIA.md.
+- Motor compilado depurado de unos 629 a 467 MB.
+- Código, panel, documentación y herramientas reunidos en LunaPOS junto al programa, conservando datos y respaldos.
+- Compilación desde fuentes exportadas sin .git e inclusión del desinstalador en el payload.
+
 ## Cambios preparados — 2026-10-18
 
 - Al confirmar una venta, el cliente vuelve a Público general para impedir que la siguiente compra herede descuentos. Si el cobro falla, se conserva el cliente para reintentar.

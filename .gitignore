@@ -40,3 +40,14 @@ outputs/
 *.cer
 *.sqlite
 *.sqlite-*
+
+/datos-prueba/
+
+/work/
+/.build-venv/
+
+# Aplicación local y datos privados
+/programa/
+/datos/
+/respaldos/
+/Abrir LunaPOS.lnk

@@ -4,7 +4,7 @@ Promociones: GET `/api/promotions` para consultar; POST `/api/promotions/save` r
 
 Historial y corte agregan `cost_cents`, `tax_cents`, `profit_cents` y `zero_cost_units` solo con permiso `costs.view`. El costo procede de las asignaciones históricas de lotes. CSV conserva importes en pesos.
 
-Historial: GET `/api/sales/history?from=YYYY-MM-DD&to=YYYY-MM-DD` para usuarios con `sell` o `reports.view`. CSV: misma ruta terminada en `.csv`; `summary=1` exporta totales diarios. Dirección usa `/direccion/api/history`, `/direccion/api/history.csv` y `/direccion/api/metrics`, con su cookie independiente y permisos de Dirección. Los CSV presentan pesos; los JSON conservan centavos. Se admiten hasta 366 días por consulta.
+Historial: GET `/api/sales/history?from=YYYY-MM-DD&to=YYYY-MM-DD` para usuarios con `reports.view`; el cajero consulta sus tickets en `/api/tickets`. CSV: misma ruta terminada en `.csv`; `summary=1` exporta totales diarios. Dirección usa `/direccion/api/history`, `/direccion/api/history.csv` y `/direccion/api/metrics`, con su cookie independiente y permisos de Dirección. Los CSV presentan pesos; los JSON conservan centavos. Se admiten hasta 366 días por consulta.
 
 POST `/api/logout` devuelve 409 si existe un turno abierto del usuario; debe cerrarlo con el conteo primero. La sesión de Dirección no está sujeta a esa restricción porque no opera caja.
 
@@ -25,7 +25,7 @@ Todas las cantidades monetarias son centavos y las cantidades de inventario son 
 | POST `/api/products/deactivate` | `{id}`; `products.delete` |
 | GET `/api/suppliers` | Directorio de proveedores, máximo 200 |
 | POST `/api/suppliers/save` | `{id?,business_name,contact,phone,credit_days}`; `suppliers.manage` |
-| GET `/api/customers?q=` | Buscar nombre/teléfono, máximo 50 |
+| GET `/api/customers?q=` | Buscar nombre/teléfono, listado completo de clientes activos |
 | POST `/api/customers/save` | `{id?,name,phone,discount_bps}`; `customers.manage` |
 | GET `/api/customers/history?id=1` | Últimas 100 compras; `reports.view` |
 | POST `/api/inventory/receive` | Recepción con lote y costo; `inventory.receive` |
@@ -162,3 +162,37 @@ Ante una respuesta perdida, reintenta ventas/devoluciones con **la misma clave y
 - POST `/api/inventory/batch/edit`: `{batch_id, lot_number?, expires_on?, reason}`; permiso `inventory.adjust`.
 
 Los archivos admiten hasta 64 MB antes de codificar a base64 y la importación admite hasta 50,000 registros. Los respaldos Botica actuales son versión 2; el inventario JSON usa formato botica-inventory, versión 1. En recepción, proveedor, lote y expires_on ahora son opcionales; fecha vacía se guarda como NULL.
+
+## Cambios de la copia mejorada
+
+El historial financiero y sus exportaciones requieren `reports.view`. Los tickets
+propios siguen disponibles mediante `/api/tickets` y `/api/ticket`.
+
+`/api/cash` y `/api/inventory/receive` aceptan `request_key`. Repetir la misma clave,
+usuario y cuerpo devuelve el ID original; cambiar el contenido devuelve 409.
+El frontend conserva esa clave al reintentar desde el mismo formulario. Los clientes
+anteriores sin clave siguen funcionando, sin protección contra duplicados.
+
+Los cortes Z se leen de `report_json`. La recepción y el envío HTTP ocurren fuera
+del bloqueo de restauración; las conexiones inactivas tienen un límite de 10 segundos.
+
+## Recuperación durable (0.2)
+
+- GET `/api/operations/pending`: solicitudes propias pendientes e identidad local.
+- POST `/api/operations/prepare`: `{path,payload}`; persiste el cuerpo exacto con
+  request_key, usuario y turno antes de la primera ejecución.
+- POST `/api/operations/recover`: `{request_key}`; recupera/reintenta la misma operación.
+- POST `/api/operations/ack`: elimina el pendiente únicamente si ya está confirmado.
+- POST `/api/operations/cancel`: elimina únicamente una solicitud no confirmada.
+
+Se comprueban sesión y permisos; otro usuario no puede consultar o recuperar el
+pendiente. Un turno distinto impide confirmar una operación que no se había
+registrado. La restauración limpia pendientes y renueva la identidad local.
+
+## Respaldos externos (0.2)
+
+GET/POST `/api/backup/settings` consulta/configura `{directory}` con backup.manage.
+POST `/api/backup/run` crea una copia externa; `{verify_restore:true}` añade una
+restauración de prueba en una base temporal. No modifica la base de origen.
+El envío al directorio externo y la restauración de prueba se hacen fuera del
+bloqueo del mostrador, sobre una instantánea ya capturada y autorizada.

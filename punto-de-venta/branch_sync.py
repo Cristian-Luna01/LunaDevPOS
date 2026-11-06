@@ -2,6 +2,7 @@
 from contextlib import contextmanager, closing
 import datetime as dt
 import json
+import logging
 import sqlite3
 import threading
 import uuid
@@ -69,6 +70,7 @@ class BranchSync:
         self.thread = None
         self.cached = None
         self.signature = None
+        self.sent_signature = None
         self.message = 'Sin vincular a una cuenta del dueño.'
         with database(self.path) as db:
             db.execute('CREATE TABLE IF NOT EXISTS link(id INTEGER PRIMARY KEY CHECK(id=1),url TEXT NOT NULL,token TEXT NOT NULL,name TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,last_ok TEXT)')
@@ -103,6 +105,7 @@ class BranchSync:
         with self.lock, database(self.path) as db:
             db.execute('DELETE FROM link')
             db.execute('DELETE FROM sent_days')
+        self.sent_signature=None
         self.message = 'Desvinculado. Las ventas y el inventario permanecen en esta computadora.'
         return self.status()
 
@@ -127,16 +130,17 @@ class BranchSync:
         payload['generated_at']=dt.datetime.now(dt.timezone.utc).isoformat()
         payload.update(revision=revision, name=row[2],instance_id=self.identity)
         body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode()
-        if len(body) > 900_000:
-            raise Error('El catálogo supera el tamaño admitido por esta primera versión de conexión. No se envió un catálogo incompleto.')
         if sender:
             result = sender(row[0], reveal(row[1]), body)
         else:
-            request = Request(row[0]+'/api/snapshot', data=body, headers={'Content-Type':'application/json', 'Authorization':'Bearer '+reveal(row[1]),'User-Agent':'NuvariaPOS/1.0 (Windows; branch reporting)'}, method='POST')
-            with build_opener(ProxyHandler({}), NoRedirect()).open(request, timeout=10) as response:
-                result = json.loads(response.read(4096))
+            from sync_transport import send
+            if self.sent_signature==self.signature:
+                result=send(row[0],reveal(row[1]),'/api/heartbeat',{'instance_id':self.identity,'revision':revision})
+            else:
+                result=send(row[0],reveal(row[1]),'/api/snapshot',payload)
         if result.get('revision') != revision or result.get('ok') is not True:
             raise Error('La página central no confirmó esta actualización')
+        self.sent_signature=list(self.signature)
         with self.lock, database(self.path) as db:
             db.execute('UPDATE link SET last_ok=? WHERE id=1 AND url=? AND token=?', (payload['generated_at'],row[0],row[1]))
         self.message = 'Conectado. Actualizando el historial completo…'
@@ -164,12 +168,11 @@ class BranchSync:
                 revision=active[2]+1;store.execute('UPDATE link SET revision=? WHERE id=1',(revision,))
             payload={'version':2,'instance_id':self.identity,'revision':revision,'day':day,'fingerprint':fingerprint,'report':report}
             body=json.dumps(payload,ensure_ascii=False,separators=(',',':')).encode()
-            if len(body)>900_000:raise Error('El detalle de un día supera el tamaño de envío. No se envió información parcial.')
             if sender:
                 result=sender(link[0],reveal(link[1]),body)
             else:
-                request=Request(link[0]+'/api/history-day',data=body,headers={'Content-Type':'application/json','Authorization':'Bearer '+reveal(link[1]),'User-Agent':'NuvariaPOS/1.0 (Windows; branch reporting)'},method='POST')
-                with build_opener(ProxyHandler({}),NoRedirect()).open(request,timeout=10) as response:result=json.loads(response.read(4096))
+                from sync_transport import send
+                result=send(link[0],reveal(link[1]),'/api/history-day',payload)
             if result.get('ok') is not True or result.get('revision')!=revision:raise Error('El historial no confirmó la actualización')
             with self.lock,database(self.path) as store:
                 active=store.execute('SELECT url,token FROM link WHERE id=1').fetchone()
@@ -184,7 +187,10 @@ class BranchSync:
             while not self.closed.is_set():
                 try:
                     self.once()
+                except Error as error:
+                    self.message = str(error)
                 except Exception:
+                    logging.warning('No se pudo sincronizar la sucursal; se reintentará.')
                     self.message = 'No se pudo sincronizar. El mostrador sigue funcionando; se reintentará automáticamente.'
                 self.wake.wait(15)
                 self.wake.clear()

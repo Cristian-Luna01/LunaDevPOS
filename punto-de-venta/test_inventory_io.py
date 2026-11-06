@@ -135,11 +135,12 @@ class TransferTest(unittest.TestCase):
         with self.assertRaises(Error):transfer.read_backup(upload(json.dumps(doc)))
         doc.pop('sha256');doc['sha256']=fingerprint(doc)
         fresh=POS(Path(self.tmp.name)/'fresh.sqlite3');fresh.initialize('temp','temporary-password')
+        with fresh.db() as db:original_triggers={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
         with self.assertRaises(Error):transfer.restore(fresh,1,upload(json.dumps(doc),confirmation='RESTAURAR'))
         self.assertTrue(fresh.login('temp','temporary-password'))
         with fresh.db() as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM products').fetchone()[0],0)
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'").fetchone()[0],8)
+            self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='trigger'")},original_triggers)
 
     def test_import_failure_is_atomic_and_permissions_enforced(self):
         with self.pos.db(True) as db:

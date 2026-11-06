@@ -1,3 +1,4 @@
+import {loadPayload,savePayload} from './sync_transport.js';
 // Mantiene resúmenes históricos sin duplicar los movimientos detallados.
 export function cutoffDay(now=new Date()){
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Mexico_City',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
@@ -15,10 +16,14 @@ export async function cleanup(DB,now=new Date()){
  // Lotes pequeños y actualización condicionada: no pisa una revisión concurrente.
  const {results}=await DB.prepare("SELECT branch_id,day,fingerprint,revision,payload FROM history_days WHERE day<? AND COALESCE(json_extract(payload,'$.history_storage'),'detail')!='summary' ORDER BY day LIMIT 20").bind(cutoffDay(now)).all();
  if(!results.length)return 0;
- const updates=results.map(row=>{
-  const report=JSON.parse(row.payload);const reduced=compact(report);
+ const updates=[];let budget=0;
+ for(const row of results){
+  const pointer=JSON.parse(row.payload),cost=(pointer.count||0)+4;
+  if(updates.length&&budget+cost>40)break;
+  budget+=cost;
+  const report=await loadPayload(DB,row.branch_id,row.payload);const reduced=compact(report);
   if(JSON.stringify(report.totals)!==JSON.stringify(reduced.totals)||JSON.stringify(report.products)!==JSON.stringify(reduced.products))throw Error('Resumen inconsistente');
-  return DB.prepare('UPDATE history_days SET payload=? WHERE branch_id=? AND day=? AND revision=? AND fingerprint=? AND payload=?').bind(JSON.stringify(reduced),row.branch_id,row.day,row.revision,row.fingerprint,row.payload);
- });
- await DB.batch(updates);return results.length;
+  updates.push(DB.prepare('UPDATE history_days SET payload=? WHERE branch_id=? AND day=? AND revision=? AND fingerprint=? AND payload=?').bind(await savePayload(DB,row.branch_id,reduced),row.branch_id,row.day,row.revision,row.fingerprint,row.payload));
+ }
+ await DB.batch(updates);return updates.length;
 }

@@ -1,3 +1,4 @@
+import {loadPayload} from './sync_transport.js';
 import {retained} from './retention.js';
 const fields=['sales_cents','refunds_cents','net_cents','sold_units','returned_units','tickets','credit_cents','tax_cents','cost_cents','profit_cents','zero_cost_units','card_fee_cents','card_fee_unconfigured_cents'];
 export const zeros=()=>({...Object.fromEntries(fields.map(k=>[k,0])),payments_by_method:{cash:0,card:0,transfer:0}});
@@ -65,7 +66,7 @@ export function metrics(result,previous,rows,all=true){
 }
 export async function history(DB,rows,from,to,all=true,metric=false){
  dates(from,to);const count=(new Date(to)-new Date(from))/86400000+1,previousTo=new Date(new Date(from)-86400000).toISOString().slice(0,10),previousFrom=new Date(new Date(from)-(count+0)*86400000).toISOString().slice(0,10);
- const docs=[];for(const b of rows){const q=await DB.prepare('SELECT branch_id,day,fingerprint,payload FROM history_days WHERE branch_id=? AND day BETWEEN ? AND ? ORDER BY day').bind(b.id,metric?previousFrom:from,to).all();docs.push(...q.results);}
+ const docs=[];for(const b of rows){const q=await DB.prepare('SELECT branch_id,day,fingerprint,payload FROM history_days WHERE branch_id=? AND day BETWEEN ? AND ? ORDER BY day').bind(b.id,metric?previousFrom:from,to).all();for(const doc of q.results)docs.push({...doc,payload:await loadPayload(DB,doc.branch_id,doc.payload)});}
  const result=mergeHistory(rows,docs,from,to,all);
  return metric?metrics(result,mergeHistory(rows,docs,previousFrom,previousTo,all),rows,all):result;
 }

@@ -6,6 +6,7 @@ from urllib.error import HTTPError
 from pathlib import Path
 import json, os, re, subprocess, threading, socket, ipaddress
 from core import ROOT, Error
+from http_transport import discard_small_body
 from owner_gate import PrivateGate,PAGE as GATE_PAGE,SCRIPT as GATE_SCRIPT
 
 GET_ROUTES={'/direccion','/direccion/','/direccion/panel.js','/style.css','/reports.js','/branding.js','/navigation.js','/favicon.svg','/business-settings','/business-logo.png','/direccion/api/summary','/direccion/api/history','/direccion/api/history.csv','/direccion/api/history.xlsx','/direccion/api/metrics'}
@@ -24,11 +25,17 @@ def local_addresses():
     return sorted(a for a in addresses if private_address(a) and not a.startswith('127.'))
 
 class BridgeHandler(BaseHTTPRequestHandler):
+    timeout=10
     def log_message(self,*args):pass
     def do_GET(self):self.forward(False)
     def do_POST(self):self.forward(True)
     def error(self,status,message):
-        raw=json.dumps({'error':message},ensure_ascii=False).encode();self.send_response(status);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(raw)
+        discard_small_body(self)
+        raw=json.dumps({'error':message},ensure_ascii=False).encode()
+        self.send_response(status);self.send_header('Content-Type','application/json; charset=utf-8')
+        self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','no-store')
+        try:self.end_headers();self.wfile.write(raw)
+        except OSError:self.close_connection=True
     def forward(self,write):
         manager=self.server.manager;path=urlsplit(self.path).path
         local=getattr(self.server,'local_mode',False)
@@ -43,7 +50,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             try:
                 length=int(self.headers.get('Content-Length','0'))
                 if not 0<length<=1024 or self.headers.get('Content-Type','').split(';')[0]!='application/json':raise ValueError()
-                body=json.loads(self.rfile.read(length));code=body.get('code')
+                raw=self.rfile.read(length);self._body_read=True;body=json.loads(raw);code=body.get('code')
             except (ValueError,TypeError,AttributeError):return self.error(400,'Solicitud de acceso inválida')
             with manager.lock:status,data,cookie=gate.verify(code,self.client_address[0])
             return self.gate_response(status,json.dumps(data).encode(),'application/json',cookie)
@@ -66,7 +73,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             try:length=int(self.headers.get('Content-Length','0'))
             except ValueError:return self.error(400,'Tamaño inválido')
             if not 0<length<=8192:return self.error(413,'Tamaño inválido')
-            body=self.rfile.read(length);headers.update({'Content-Type':'application/json','X-POS-Request':'1','Origin':f'http://127.0.0.1:{manager.backend.server_port}'})
+            body=self.rfile.read(length);self._body_read=True;headers.update({'Content-Type':'application/json','X-POS-Request':'1','Origin':f'http://127.0.0.1:{manager.backend.server_port}'})
         try:
             request=Request(f'http://127.0.0.1:{manager.backend.server_port}'+self.path,data=body,headers=headers)
             try:response=build_opener(ProxyHandler({})).open(request,timeout=25)
@@ -83,6 +90,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
         except (OSError,ValueError):self.error(502,'No se pudo consultar el punto de venta. Intenta nuevamente.')
 
     def gate_response(self,status,raw,mime='text/html; charset=utf-8',cookie=None):
+        if status>=400:discard_small_body(self)
         self.send_response(status);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','no-store');self.send_header('Referrer-Policy','no-referrer');self.send_header('X-Content-Type-Options','nosniff');self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         if cookie:self.send_header('Set-Cookie',cookie)
         self.end_headers();self.wfile.write(raw)

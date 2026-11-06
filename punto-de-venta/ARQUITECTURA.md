@@ -1,5 +1,10 @@
 # Arquitectura y flujo de datos
 
+Actualización de la copia: el escritorio vigente usa PySide6/Qt WebEngine y sí
+incorpora un navegador. Los ejemplos de navegador externo describen la variante
+web histórica. El esquema actual es versión 10. Consulta GUIA.md en
+la raíz para los cambios de permisos, red y cortes cerrados.
+
 ## 1. Despliegue y recursos
 
 ```mermaid

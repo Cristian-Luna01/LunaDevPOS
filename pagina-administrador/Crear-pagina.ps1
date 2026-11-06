@@ -39,6 +39,7 @@ if ((Read-Host 'Escribe CONTINUAR si es la cuenta correcta') -cne 'CONTINUAR') {
 Invoke-Cloud @('d1','create',$databaseName,'--binding','DB','--update-config','--use-remote')
 Invoke-Cloud @('d1','execute',$databaseName,'--remote','--file','schema.sql','--yes')
 Invoke-Cloud @('d1','execute',$databaseName,'--remote','--file','migrations/0002_full_direction.sql','--yes')
+Invoke-Cloud @('d1','execute',$databaseName,'--remote','--file','migrations/0003_chunked_sync.sql','--yes')
 # Publicar primero sin credenciales no abre el acceso: el Worker falla cerrado.
 Invoke-Cloud @('deploy')
 $randomBytes = New-Object byte[] 32

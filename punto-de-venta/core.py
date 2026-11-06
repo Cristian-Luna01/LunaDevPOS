@@ -65,6 +65,12 @@ class POS:
         if Path(self.path).exists():
             from migrations import upgrade
             upgrade(self.path, PERMISSIONS)
+            with self.db(True) as db:
+                if db.execute("SELECT 1 FROM sqlite_master WHERE name='users'").fetchone():
+                    from pending_operations import install
+                    install(db)
+                    from performance import install as install_indexes
+                    install_indexes(db)
 
     @contextlib.contextmanager
     def db(self, write=False):
@@ -89,6 +95,10 @@ class POS:
             db.executescript((ROOT / 'schema.sql').read_text(encoding='utf-8'))
             from billing_schema import install
             install(db)
+            from pending_operations import install as install_journal
+            install_journal(db)
+            from performance import install as install_indexes
+            install_indexes(db)
         with self.db(True) as db:
             if db.execute('SELECT 1 FROM users').fetchone():
                 raise Error('La base ya está inicializada')
@@ -173,12 +183,30 @@ class POS:
             self.audit(db, uid, 'shift.open', sid, data)
             return {'id': sid}
 
+    def replay_movement(self, db, uid, action, data):
+        """La auditoría inmutable conserva también el recibo de cada reintento."""
+        if 'request_key' not in data:
+            return None  # Compatibilidad con integraciones anteriores.
+        required(data, 'request_key')
+        key = data['request_key']
+        previous = db.execute("SELECT user_id,entity_id,details FROM audit_log WHERE action=? AND json_extract(details,'$.request_key')=? ORDER BY id LIMIT 1", (action,key)).fetchone()
+        if previous:
+            details=json.loads(previous['details'])
+            result=details.pop('_result',{'id':int(previous['entity_id'])})
+            if previous['user_id'] != uid or fingerprint(details) != fingerprint(data):
+                raise Error('Clave de solicitud reutilizada con otros datos',409)
+            return result
+        return None
+
     def cash_movement(self, uid, data):
         with self.db(True) as db:
             direction = data.get('direction')
             if direction not in ('in', 'out'):
                 raise Error('Dirección inválida')
             self.require(db, uid, 'cash.' + direction)
+            previous = self.replay_movement(db,uid,'cash.movement',data)
+            if previous is not None:
+                return previous
             sid = self.shift(db, uid)['id']
             mid = db.execute('INSERT INTO cash_movements(shift_id,user_id,direction,category,amount_cents,supplier_id,invoice_ref,concept) VALUES (?,?,?,?,?,?,?,?)',
                 (sid, uid, direction, required(data, 'category'), integer(data.get('amount_cents'), 'Importe', 1),
@@ -190,6 +218,12 @@ class POS:
         shift = db.execute('SELECT * FROM cash_shifts WHERE id=?', (sid,)).fetchone()
         if not shift:
             raise Error('Turno inexistente', 404)
+        if shift['closed_at'] and shift['report_json']:
+            saved = json.loads(shift['report_json'])
+            saved.update(type='Z', counted_cents=shift['counted_cents'],
+                         expected_cents=shift['expected_cents'],
+                         difference_cents=shift['counted_cents']-shift['expected_cents'])
+            return saved
         payments = {m: 0 for m in ('cash','debit','credit','transfer')}
         refunds = payments.copy()
         for r in db.execute('SELECT p.method,SUM(p.amount_cents) amount FROM sale_payments p JOIN sales s ON s.id=p.sale_id WHERE s.shift_id=? GROUP BY p.method', (sid,)):
@@ -437,6 +471,8 @@ class POS:
         """Entrada sencilla: conserva ficha y usa el último costo de recepción."""
         with self.db(True) as db:
             self.require(db,uid,'inventory.receive')
+            previous=self.replay_movement(db,uid,'inventory.restock',data)
+            if previous is not None:return previous
             pid=integer(data.get('product_id'),'Producto',1)
             product=db.execute('SELECT * FROM products WHERE id=? AND active=1',(pid,)).fetchone()
             if not product:raise Error('Producto inexistente o dado de baja',404)
@@ -446,12 +482,15 @@ class POS:
             before=db.execute('SELECT COALESCE(SUM(quantity),0) FROM batches WHERE product_id=? AND (expires_on IS NULL OR expires_on>?)',(pid,dt.date.today().isoformat())).fetchone()[0]
             bid=db.execute('INSERT INTO batches(product_id,lot_number,quantity,unit_cost_cents) VALUES (?,?,?,?)',(pid,'SIN LOTE CAPTURADO',qty,cost)).lastrowid
             db.execute("INSERT INTO inventory_movements(batch_id,user_id,quantity_delta,kind,reason) VALUES (?,?,?,'receipt','Recepción de mercancía')",(bid,uid,qty))
-            self.audit(db,uid,'inventory.receive',bid,{'product_id':pid,'quantity':qty,'unit_cost_cents':cost})
+            self.audit(db,uid,'inventory.restock',bid,{**data,'_result':{'id':bid,'stock_before':before,'stock_after':before+qty}})
             return {'id':bid,'stock_before':before,'stock_after':before+qty}
 
     def receive(self, uid, data):
         with self.db(True) as db:
             self.require(db,uid,'inventory.receive')
+            previous = self.replay_movement(db,uid,'inventory.receive',data)
+            if previous is not None:
+                return previous
             expiry = data.get('expires_on') or None
             try:
                 if expiry is not None and dt.date.fromisoformat(expiry).isoformat()!=expiry:

@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sqlite3
+from http_transport import discard_small_body
 from urllib.parse import urlparse, parse_qs
 from core import POS, Error, PERMISSIONS, ROOT, required, integer, rounded
 import inventory_io
@@ -19,14 +20,45 @@ import promotions
 import credit
 import branding
 
+STATIC_ROUTES = {
+    '/inventory-forms.js': ('inventory-forms.js','text/javascript'),
+    '/equipment-check.js': ('equipment-check.js','text/javascript'),
+    '/backup-settings.js': ('backup-settings.js','text/javascript'),
+    '/pending-operations.js': ('pending-operations.js','text/javascript'),
+    '/tickets-ui.js': ('tickets-ui.js', 'text/javascript'),
+    '/entities-ui.js': ('entities-ui.js', 'text/javascript'),
+    '/card-fees-ui.js': ('card-fees-ui.js', 'text/javascript'),
+    '/billing-ui.js': ('billing-ui.js', 'text/javascript'),
+    '/login-hints.js': ('login-hints.js', 'text/javascript'),
+    '/live-view.js': ('live-view.js', 'text/javascript'),
+    '/owner-access-ui.js': ('owner-access-ui.js', 'text/javascript'),
+    '/metric-help.js': ('metric-help.js', 'text/javascript'),
+    '/navigation.js': ('navigation.js', 'text/javascript'),
+    '/branding.js': ('branding.js', 'text/javascript'),
+    '/': ('index.html', 'text/html'),
+    '/app.js': ('app.js', 'text/javascript'),
+    '/inventory-ui.js': ('inventory-ui.js', 'text/javascript'),
+    '/direccion': ('direction.html', 'text/html'),
+    '/direccion/': ('direction.html', 'text/html'),
+    '/direccion/panel.js': ('direction.js', 'text/javascript'),
+    '/promotions-ui.js': ('promotions-ui.js', 'text/javascript'),
+    '/reports.js': ('reports.js', 'text/javascript'),
+    '/stock.js': ('stock.js', 'text/javascript'),
+    '/style.css': ('style.css', 'text/css'),
+}
+
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'FarmaciaPOS/1.0'
+    server_version = 'LunaDevPOS/1.0'
+    timeout = 10
 
     def log_message(self, fmt, *args):
         # Evita registrar nombres, teléfonos, búsquedas y credenciales.
         logging.info('%s %s', self.command, urlparse(self.path).path)
 
     def send(self, status, body, mime='application/json; charset=utf-8', cookie=None, filename=None):
+        if getattr(self, '_defer_response', False):
+            self._response = (status, body, mime, cookie, filename)
+            return
         if not isinstance(body,bytes):
             body = json.dumps(body,ensure_ascii=False).encode('utf-8')
         self.send_response(status)
@@ -40,8 +72,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Content-Disposition',f'attachment; filename="{filename}"')
         if cookie:
             self.send_header('Set-Cookie',cookie)
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.end_headers()
+            self.wfile.write(body)
+        except OSError:
+            # La operación puede estar confirmada aunque el cliente se desconecte.
+            self.close_connection = True
 
     def do_GET(self):
         self.handle_request(False)
@@ -49,34 +85,65 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self.handle_request(True)
 
-    def handle_request(self, write):
-        # Autenticación y operación quedan en la misma sección protegida durante
-        # una restauración: ninguna solicitud conserva un uid de la base anterior.
-        with self.server.pos.request_lock:
-            self.handle_locked_request(write)
+    def read_request(self, write):
+        host = self.headers.get('Host','')
+        if host not in (f'127.0.0.1:{self.server.server_port}',f'localhost:{self.server.server_port}'):
+            raise Error('Host no permitido',403)
+        path = urlparse(self.path).path
+        if write:
+            if self.headers.get('Origin') not in (None,f'http://{host}') or self.headers.get('X-POS-Request')!='1':
+                raise Error('Origen de solicitud no permitido',403)
+            if self.headers.get('Content-Type','').split(';')[0]!='application/json':
+                raise Error('Usa application/json',415)
+            length = int(self.headers.get('Content-Length','0'))
+            file_route=path in ('/api/branding','/direccion/api/branding','/api/inventory/import/preview','/api/inventory/import/confirm','/api/backup/preview','/api/backup/restore')
+            if not 0<length<=(90*1024*1024 if file_route else 262144):
+                raise Error('Tamaño de solicitud inválido',413)
+            raw = self.rfile.read(length)
+            self._body_read = True
+            if len(raw) != length:
+                raise Error('Solicitud incompleta',400)
+            data = json.loads(raw)
+            if not isinstance(data,dict):
+                raise Error('Objeto JSON requerido')
+        else:
+            data = {k:v[0] for k,v in parse_qs(urlparse(self.path).query).items()}
+        return path, data
 
-    def handle_locked_request(self, write):
+    def reject_request(self, status, message):
+        # Consumir un cuerpo pequeño ya enviado evita un reset TCP al rechazarlo.
+        # La espera es acotada y no retiene el bloqueo de la caja.
+        discard_small_body(self)
+        self.close_connection = True
+        self.send(status, {'error': message})
+
+    def handle_request(self, write):
+        # La red queda fuera de la exclusión necesaria para restaurar identidades.
         try:
-            host = self.headers.get('Host','')
-            if host not in (f'127.0.0.1:{self.server.server_port}',f'localhost:{self.server.server_port}'):
-                raise Error('Host no permitido',403)
-            path = urlparse(self.path).path
-            if write:
-                if self.headers.get('Origin') not in (None,f'http://{host}') or self.headers.get('X-POS-Request')!='1':
-                    raise Error('Origen de solicitud no permitido',403)
-                if self.headers.get('Content-Type','').split(';')[0]!='application/json':
-                    raise Error('Usa application/json',415)
-                length = int(self.headers.get('Content-Length','0'))
-                file_route=path in ('/api/branding','/direccion/api/branding','/api/inventory/import/preview','/api/inventory/import/confirm','/api/backup/preview','/api/backup/restore')
-                if not 0<length<=(90*1024*1024 if file_route else 262144):
-                    raise Error('Tamaño de solicitud inválido',413)
-                data = json.loads(self.rfile.read(length))
-                if not isinstance(data,dict):
-                    raise Error('Objeto JSON requerido')
-            else:
-                data = {k:v[0] for k,v in parse_qs(urlparse(self.path).query).items()}
-            if not write and path in ('/','/tickets-ui.js','/entities-ui.js','/card-fees-ui.js','/billing-ui.js','/login-hints.js','/live-view.js','/owner-access-ui.js','/metric-help.js','/app.js','/style.css','/inventory-ui.js','/direccion','/direccion/','/direccion/panel.js','/stock.js','/reports.js','/promotions-ui.js','/branding.js','/navigation.js'):
-                filename,mime = {'/tickets-ui.js':('tickets-ui.js','text/javascript'),'/entities-ui.js':('entities-ui.js','text/javascript'),'/card-fees-ui.js':('card-fees-ui.js','text/javascript'),'/billing-ui.js':('billing-ui.js','text/javascript'),'/login-hints.js':('login-hints.js','text/javascript'),'/live-view.js':('live-view.js','text/javascript'),'/owner-access-ui.js':('owner-access-ui.js','text/javascript'),'/metric-help.js':('metric-help.js','text/javascript'),'/navigation.js':('navigation.js','text/javascript'),'/branding.js':('branding.js','text/javascript'),'/':('index.html','text/html'),'/app.js':('app.js','text/javascript'),'/inventory-ui.js':('inventory-ui.js','text/javascript'),'/direccion':('direction.html','text/html'),'/direccion/':('direction.html','text/html'),'/direccion/panel.js':('direction.js','text/javascript'),'/promotions-ui.js':('promotions-ui.js','text/javascript'),'/reports.js':('reports.js','text/javascript'),'/stock.js':('stock.js','text/javascript'),'/style.css':('style.css','text/css')}[path]
+            path, data = self.read_request(write)
+            self._defer_response = True
+            self._response = None
+            self._postprocess = None
+            try:
+                with self.server.pos.request_lock:
+                    self.handle_locked_request(write, path, data)
+            finally:
+                self._defer_response = False
+            if self._postprocess is not None:
+                self._postprocess()
+            if self._response is not None:
+                self.send(*self._response)
+        except (TimeoutError, ConnectionError, OSError):
+            self.close_connection = True
+        except Error as error:
+            self.reject_request(error.status, str(error))
+        except (ValueError, TypeError):
+            self.reject_request(400, 'Datos de solicitud inválidos')
+
+    def handle_locked_request(self, write, path, data):
+        try:
+            if not write and path in STATIC_ROUTES:
+                filename,mime = STATIC_ROUTES[path]
                 return self.send(200,(ROOT/'static'/filename).read_bytes(),mime+'; charset=utf-8')
             pos = self.server.pos
             if not write and path=='/favicon.svg':return self.send(200,(ROOT/'static'/'favicon.svg').read_bytes(),'image/svg+xml')
@@ -93,6 +160,28 @@ class Handler(BaseHTTPRequestHandler):
             cookies = SimpleCookie(self.headers.get('Cookie',''))
             token = cookies[cookie_name].value if cookie_name in cookies else ''
             uid = pos.session_user(token)
+            if path in ('/api/backup/settings','/api/backup/run'):
+                import external_backup
+                with pos.db() as db:pos.require(db,uid,'backup.manage')
+                service=getattr(self.server,'external_backup',None)
+                if service is None:service=self.server.external_backup=external_backup.BackupService(pos)
+                if path.endswith('/settings'):
+                    result=external_backup.save_settings(pos,uid,data) if write else external_backup.settings(pos)
+                    return self.send(200,{**result,'status':service.status})
+                if write:
+                    from inventory_io import backup_document
+                    with pos.db() as db:raw,_,_=backup_document(db)
+                    self._postprocess=lambda:self.send(200,service.run(data.get('verify_restore') is True,raw=raw))
+                    return
+                raise Error('Ruta inexistente',404)
+            if path.startswith('/api/operations/'):
+                import pending_operations as pending
+                route=path.rsplit('/',1)[-1]
+                if route=='pending' and not write:return self.send(200,pending.listing(pos,uid))
+                if write and route in ('prepare','recover','ack','cancel'):
+                    result=pending.prepare(pos,uid,data) if route=='prepare' else pending.recover(pos,uid,data) if route=='recover' else pending.finish(pos,uid,data,cancel=route=='cancel')
+                    return self.send(200,result)
+                raise Error('Ruta inexistente',404)
             if path=='/api/card-fees/settings':
                 import card_fees
                 return self.send(200,card_fees.settings(pos,uid,data if write else None))
@@ -145,8 +234,7 @@ class Handler(BaseHTTPRequestHandler):
             if write and path=='/api/promotions/save':return self.send(200,promotions.save(pos,uid,data))
             if not write and path in ('/api/sales/history','/api/sales/history.csv','/api/sales/history.xlsx'):
                 with pos.db() as db:
-                    if not pos.permissions(db,uid).intersection({'sell','reports.view'}):
-                        raise Error('No tienes permiso para consultar ventas',403)
+                    pos.require(db,uid,'reports.view')
                     result=analytics.history(db,data,'costs.view' in pos.permissions(db,uid))
                 if path.endswith('.xlsx'):
                     from history_xlsx import export_history_xlsx
@@ -308,11 +396,14 @@ class Handler(BaseHTTPRequestHandler):
                 columns = 'p.id,p.barcode,p.name,p.generic_name,p.category_id,p.price_cents,p.tax_bps,p.min_stock,p.max_stock,p.reorder_point,p.requires_prescription'
                 if 'costs.view' in permissions:
                     columns += ',p.cost_cents'
-                # Búsqueda acotada. LIKE contiene es fallback para catálogos modestos.
-                rows = db.execute(f'''SELECT {columns},COALESCE(b.stock,0) stock,COALESCE(b.physical_stock,0) physical_stock FROM products p
-                    LEFT JOIN (SELECT product_id,SUM(CASE WHEN expires_on IS NULL OR expires_on>? THEN quantity ELSE 0 END) stock,SUM(quantity) physical_stock FROM batches GROUP BY product_id) b ON b.product_id=p.id
-                    WHERE p.active=1 AND (p.barcode=? OR p.name LIKE ? OR p.generic_name LIKE ?) ORDER BY (p.barcode=?) DESC,p.name LIMIT 40 OFFSET ?''',
-                    (dt.date.today().isoformat(),q,'%'+q+'%','%'+q+'%',q,offset))
+                from performance import product_search
+                condition,search_args=product_search(db,q)
+                today=dt.date.today().isoformat()
+                rows=db.execute(f"""SELECT {columns},
+                    COALESCE((SELECT SUM(quantity) FROM batches WHERE product_id=p.id AND (expires_on IS NULL OR expires_on>?)),0) stock,
+                    COALESCE((SELECT SUM(quantity) FROM batches WHERE product_id=p.id),0) physical_stock
+                    FROM products p WHERE p.active=1 AND {condition}
+                    ORDER BY (p.barcode=?) DESC,p.name,p.id LIMIT 40 OFFSET ?""",(today,*search_args,q,offset))
                 result = [dict(r) for r in rows]
                 active=promotions.active(db)
                 for p in result:promotions.decorate(p,active.get(p['id']))
