@@ -55,7 +55,28 @@ test('consultar un local no descarga ni procesa el inventario de los demás',asy
  assert.equal((await worker.fetch(req('snapshot',p,'',a.token),env)).status,200);
  env.sqlite.prepare('UPDATE branches SET payload=? WHERE id=?').run('invalid-json',b.id);
  const own=await worker.fetch(req('summary?branch='+a.id,null,cookie),env);assert.equal(own.status,200);assert.equal((await own.json()).products.length,1);
- assert.equal((await worker.fetch(req('summary',null,cookie),env)).status,400);
+ const combined=await worker.fetch(req('summary',null,cookie),env);
+ assert.equal(combined.status,200);
+ const view=await combined.json();assert.equal(view.products.length,1);assert.match(view.coverage_warning,/B/);
+ assert.equal((await worker.fetch(req('snapshot',{...p,__chunked:'a'.repeat(64),parts:1},'',b.token),env)).status,400);
+});
+
+test('historial rechaza contadores HTML y neutraliza fórmulas de las columnas de texto',async()=>{
+ const {exportCSV}=await import('../exports.js');
+ const env=environment(),login=await worker.fetch(req('login',{email:env.OWNER_EMAIL,secret}),env),cookie=login.headers.get('Set-Cookie').split(';')[0];
+ const b=await(await worker.fetch(req('branches',{name:'Centro'},cookie),env)).json(),p=payload(),day=p.today,fingerprint='a'.repeat(64);
+ p.version=2;p.direction={day,products:p.products,shifts:[],suppliers:[],history_days:[day],history_fingerprints:{[day]:fingerprint}};
+ assert.equal((await worker.fetch(req('snapshot',p,'',b.token),env)).status,200);
+ const report={from:day,to:day,totals:{...p.daily[0],sold_units:'<strong>falso</strong>'},products:[],events:[],cash_movements:[]};
+ const data={version:2,instance_id:p.instance_id,revision:2,day,fingerprint,report};
+ assert.equal((await worker.fetch(req('history-day',data,'',b.token),env)).status,400);
+ report.totals.sold_units=2;report.__chunked='b'.repeat(64);
+ assert.equal((await worker.fetch(req('history-day',data,'',b.token),env)).status,400);
+ delete report.__chunked;
+ assert.equal((await worker.fetch(req('history-day',data,'',b.token),env)).status,200);
+ const csv=exportCSV({events:[{day,kind:'=1+1',status:'@SUM(1)',cents:-50}]});
+ assert.ok(csv.includes('"\'=1+1"'));assert.ok(csv.includes('"\'@SUM(1)"'));assert.ok(csv.includes('"-0.50"'));
+ env.sqlite.close();
 });
 test('intentos de acceso concurrentes no eluden el contador de bloqueo',async()=>{
  const env=environment();

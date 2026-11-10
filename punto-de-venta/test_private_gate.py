@@ -28,7 +28,8 @@ class PrivateGateTest(unittest.TestCase):
  def test_code_expiry_rate_limit_no_unicode_crash(self):
   gate=PrivateGate()
   for code in (None,[], 'ñ', 'bad','bad'):self.assertEqual(gate.verify(code,'one')[0],403)
-  self.assertEqual(gate.verify(gate.key,'one')[0],429)
+  self.assertEqual(gate.verify('bad','one')[0],429)
+  self.assertEqual(gate.verify(gate.key,'one')[0],200)
   status,_,cookie=gate.verify(gate.key,'two');self.assertEqual(status,200);self.assertTrue(gate.authorized({'Cookie':cookie.split(';')[0]}))
   with patch('owner_gate.time.time',return_value=time.time()+43201):self.assertFalse(gate.authorized({'Cookie':cookie.split(';')[0]}))
 

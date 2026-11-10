@@ -119,3 +119,7 @@ def upgrade(path,permissions):
                 from operation_journal import TABLE
                 db.execute(TABLE)
                 db.execute('PRAGMA user_version=11')
+    # La revisión 11 publicada anteriormente no tenía la tabla del aviso.
+    from privacy import TABLE as PRIVACY_TABLE
+    with contextlib.closing(sqlite3.connect(path,timeout=10)) as db:
+        db.execute(PRIVACY_TABLE)

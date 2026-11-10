@@ -15,8 +15,8 @@ class PrivateGate:
         return bool(token and self.sessions.get(hashlib.sha256(token.value.encode()).hexdigest(),0)>time.time())
     def verify(self,code,peer):
         now=time.time();failures,until=self.attempts.get(peer,(0,0))
-        if until>now:return 429,{'error':'Demasiados intentos. Espera un minuto.'},None
         if not isinstance(code,str) or len(code)>80 or not code.isascii() or not hmac.compare_digest(code,self.key):
+            if until>now:return 429,{'error':'Demasiados intentos. Espera un minuto.'},None
             failures=failures+1 if until>now-60 else 1
             if len(self.attempts)>1000:self.attempts.clear()
             self.attempts[peer]=(failures,now+60 if failures>=5 else now)

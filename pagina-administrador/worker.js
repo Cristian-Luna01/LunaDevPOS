@@ -1,6 +1,6 @@
-import {storeDocument,hydrateBranches,receivePart,cleanupDocuments} from './documents.js';
+import {storeDocument,hydrateBranches,receivePart,finishUpload,cleanupDocuments} from './documents.js';
 const assembledRequests=new WeakSet();
-import {validateSnapshot} from './domain.js';
+import {validateSnapshot,validateAmounts} from './domain.js';
 import {summary,selectBranches,history} from './reporting.js';
 import {exportCSV,exportXLSX} from './exports.js';
 import {retained,cleanup} from './retention.js';
@@ -45,20 +45,30 @@ const worker={async scheduled(event,env,ctx){ctx.waitUntil(Promise.all([cleanup(
   }
   if(path==='/api/transfer'&&r.method==='POST'){
    const token=r.headers.get('Authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];if(!token)return json({error:'Clave requerida'},401);
-   const b=await env.DB.prepare('SELECT id FROM branches WHERE token_hash=? AND active=1').bind(await hash(token)).first();if(!b)return json({error:'Sucursal no autorizada'},401);
-   const p=await body(r),part=await receivePart(env.DB,b.id,p);
+   const tokenHash=await hash(token),b=await env.DB.prepare('SELECT id FROM branches WHERE token_hash=? AND active=1').bind(tokenHash).first();if(!b)return json({error:'Sucursal no autorizada'},401);
+   const p=await body(r),part=await receivePart(env.DB,b.id,p,tokenHash);
+   if(part.receipt)return json(part.receipt);
    if(!part.complete)return json({ok:true,part:p.part,complete:false});
    const next=new Request(u.origin+'/api/'+p.kind,{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:part.text});assembledRequests.add(next);
    const response=await worker.fetch(next,env,ctx);
-   if(response.ok){if(ctx?.waitUntil)ctx.waitUntil(cleanupDocuments(env.DB));}
+   if(response.ok){
+    await finishUpload(env.DB,b.id,p,await response.clone().json(),tokenHash);
+    if(ctx?.waitUntil)ctx.waitUntil(cleanupDocuments(env.DB));
+   }
    return response;
   }
   if(path==='/api/history-day'&&r.method==='POST'){
    const token=r.headers.get('Authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];if(!token)return json({error:'Clave de sucursal requerida'},401);
    const tokenHash=await hash(token),b=await env.DB.prepare('SELECT id,device_id FROM branches WHERE token_hash=? AND active=1').bind(tokenHash).first();if(!b)return json({error:'Sucursal no autorizada'},401);
    const p=await body(r);
-   if(p.version!==2||p.instance_id!==b.device_id||!Number.isSafeInteger(p.revision)||p.revision<1||!/^\d{4}-\d{2}-\d{2}$/.test(p.day)||!/^[a-f0-9]{64}$/.test(p.fingerprint||'')||p.report?.from!==p.day||p.report?.to!==p.day||!Array.isArray(p.report.events)||!Array.isArray(p.report.products)||!Array.isArray(p.report.cash_movements))return json({error:'Detalle de historial inválido'},400);
+   if(p.version!==2||!b.device_id||p.instance_id!==b.device_id||!Number.isSafeInteger(p.revision)||p.revision<1||!/^\d{4}-\d{2}-\d{2}$/.test(p.day)||!/^[a-f0-9]{64}$/.test(p.fingerprint||'')||p.report?.from!==p.day||p.report?.to!==p.day||!Array.isArray(p.report.events)||!Array.isArray(p.report.products)||!Array.isArray(p.report.cash_movements))return json({error:'Detalle de historial inválido'},400);
    const current=await env.DB.prepare('SELECT revision,fingerprint FROM history_days WHERE branch_id=? AND day=?').bind(b.id,p.day).first();if(current&&(current.revision>p.revision||(current.revision===p.revision&&current.fingerprint!==p.fingerprint)))return json({error:'Revisión antigua o incompatible'},409);
+   if(Object.hasOwn(p.report,'__chunked'))return json({error:'Campo de almacenamiento reservado'},400);
+   validateAmounts(p.report.totals);
+   for(const product of p.report.products)validateAmounts(product);
+   for(const rows of [p.report.events,p.report.cash_movements,p.report.card_fees??[],p.report.inventory_adjustments??[]]){
+    if(!Array.isArray(rows)||rows.some(row=>!row||typeof row!=='object'||Array.isArray(row)||(row.happened_at!==undefined&&typeof row.happened_at!=='string')))return json({error:'Movimientos inválidos'},400);
+   }
    p.report=retained(p.report,p.day);
    const storedReport=await storeDocument(env.DB,b.id,p.report);
    await env.DB.prepare('INSERT INTO history_days(branch_id,day,revision,fingerprint,payload) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM branches WHERE id=? AND token_hash=? AND active=1 AND device_id=?) ON CONFLICT(branch_id,day) DO UPDATE SET revision=excluded.revision,fingerprint=excluded.fingerprint,payload=excluded.payload WHERE history_days.revision<excluded.revision').bind(b.id,p.day,p.revision,p.fingerprint,storedReport,b.id,tokenHash,p.instance_id).run();
@@ -105,11 +115,11 @@ const worker={async scheduled(event,env,ctx){ctx.waitUntil(Promise.all([cleanup(
    const token=key(),id=crypto.randomUUID();await env.DB.prepare('INSERT INTO branches(id,name,token_hash) VALUES(?,?,?)').bind(id,p.name.trim(),await hash(token)).run();return json({id,token,name:p.name.trim()});
   }
   if(path==='/api/revoke'&&r.method==='POST'){
-   const p=await body(r);await env.DB.prepare('UPDATE branches SET active=0 WHERE id=?').bind(p.id).run();return json({ok:true});
+   const p=await body(r);await env.DB.batch([env.DB.prepare('UPDATE branches SET active=0 WHERE id=?').bind(p.id),env.DB.prepare('DELETE FROM upload_parts WHERE branch_id=?').bind(p.id)]);return json({ok:true});
   }
   if(path==='/api/rotate'&&r.method==='POST'){
    const p=await body(r),token=key();const branch=await env.DB.prepare('SELECT id FROM branches WHERE id=? AND active=1').bind(p.id).first();if(!branch)return json({error:'Local inexistente'},404);
-   await env.DB.batch([env.DB.prepare('UPDATE branches SET token_hash=?,device_id=NULL,revision=0 WHERE id=? AND active=1').bind(await hash(token),p.id),env.DB.prepare('UPDATE history_days SET revision=0 WHERE branch_id=?').bind(p.id)]);return json({id:p.id,token});
+   await env.DB.batch([env.DB.prepare('UPDATE branches SET token_hash=?,device_id=NULL,revision=0 WHERE id=? AND active=1').bind(await hash(token),p.id),env.DB.prepare('UPDATE history_days SET revision=0 WHERE branch_id=?').bind(p.id),env.DB.prepare('DELETE FROM upload_parts WHERE branch_id=?').bind(p.id)]);return json({id:p.id,token});
   }
   if(path==='/api/logout'&&r.method==='POST'){
    const token=(r.headers.get('Cookie')||'').match(/central_session=([a-f0-9]{64})/)?.[1];if(token)await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await hash(token)).run();return json({ok:true},200,{'Set-Cookie':'central_session=; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'});

@@ -1,9 +1,18 @@
 """Límite de conexiones activas: clientes lentos no crean hilos ilimitados."""
 from http.server import ThreadingHTTPServer as BaseServer
+import socket
 import threading
 
 class ThreadingHTTPServer(BaseServer):
     max_connections=32
+    # Windows SO_REUSEADDR can share an active listener, not just a closed port.
+    allow_reuse_address=not hasattr(socket,'SO_EXCLUSIVEADDRUSE')
+
+    def server_bind(self):
+        if not self.allow_reuse_address and hasattr(socket,'SO_EXCLUSIVEADDRUSE'):
+            self.socket.setsockopt(socket.SOL_SOCKET,socket.SO_EXCLUSIVEADDRUSE,1)
+        super().server_bind()
+
     def __init__(self,*args,**kwargs):
         self.connection_slots=threading.BoundedSemaphore(self.max_connections)
         super().__init__(*args,**kwargs)

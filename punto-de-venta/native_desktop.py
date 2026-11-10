@@ -116,8 +116,7 @@ def main():
             except Exception as error:status.setText(str(error))
             finally:
                 if token:
-                    import hashlib
-                    with pos.db(True) as db:db.execute('DELETE FROM sessions WHERE token_hash=?',(hashlib.sha256(token.encode()).hexdigest(),))
+                    pos.revoke_session(token)
         button.clicked.connect(confirm);dialog.exec()
     window.recovery_shortcut=QShortcut(QKeySequence('Ctrl+Shift+R'),window);window.recovery_shortcut.activated.connect(recovery)
     window.reload_shortcut=QShortcut(QKeySequence('Ctrl+R'),window);window.reload_shortcut.activated.connect(view.reload)

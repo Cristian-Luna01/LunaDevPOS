@@ -25,6 +25,10 @@ PERMISSIONS = {
  'backup.manage': 'Respaldar y restaurar todos los datos',
  'billing.issue':'Crear y emitir facturas de prueba', 'billing.manage':'Configurar facturación y gestionar cancelaciones'}
 
+ACCOUNT_ROLES = {'seller': 'Vendedor', 'supervisor': 'Supervisor', 'administrator': 'Administrador'}
+ADMIN_PERMISSIONS = {'users.manage', 'backup.manage'}
+SELLER_PERMISSIONS = {'sell', 'customers.manage'}
+
 class Error(Exception):
     def __init__(self, message, status=400):
         super().__init__(message)
@@ -64,9 +68,13 @@ def password_matches(secret, encoded):
 def fingerprint(data):
     return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
+def session_hash(token, audience='pos'):
+    return hashlib.sha256((audience+'\0'+token).encode()).hexdigest()
+
 class POS:
     def __init__(self, path=None):
         self.request_lock = threading.RLock()
+        self.file_upload_slot = threading.BoundedSemaphore(1)
         self.path = str(path or ROOT / 'data' / 'pos.sqlite3')
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         if Path(self.path).exists():
@@ -121,44 +129,81 @@ class POS:
         if not user or not user[0] or permission not in self.permissions(db, uid):
             raise Error('No tienes permiso para esta operación', 403)
 
+    def account_role(self, db, uid, permissions=None):
+        if permissions is None:
+            permissions = self.permissions(db, uid)
+        names = {r[0] for r in db.execute(
+            'SELECT name FROM roles JOIN user_roles ON role_id=roles.id WHERE user_id=?', (uid,))}
+        # Older accounts only stored permissions. Preserve their existing authority.
+        if ACCOUNT_ROLES['administrator'] in names or ADMIN_PERMISSIONS & permissions:
+            return 'administrator'
+        if ACCOUNT_ROLES['supervisor'] in names:
+            return 'supervisor'
+        return 'seller'
+
+    def account_access(self, db, uid):
+        user = db.execute('SELECT active FROM users WHERE id=?', (uid,)).fetchone()
+        if user and user['active']:
+            permissions = self.permissions(db, uid)
+            role = self.account_role(db, uid, permissions)
+            if role == 'administrator' and 'users.manage' in permissions:
+                return role, set(PERMISSIONS)
+            if role == 'supervisor':
+                return role, SELLER_PERMISSIONS & permissions
+        raise Error('No tienes permiso para administrar cuentas', 403)
+
+    def can_edit_account(self, db, uid, target, role, allowed, permissions):
+        target_role = self.account_role(db, target, permissions)
+        return target != uid and target_role != 'administrator' and (
+            role == 'administrator' or (target_role == 'seller' and permissions <= allowed))
+
     def audit(self, db, uid, action, entity, details):
         db.execute('INSERT INTO audit_log(user_id,action,entity_id,details) VALUES (?,?,?,?)',
                    (uid, action, entity, json.dumps(details, ensure_ascii=False)))
 
-    def login(self, username, secret):
-        if not isinstance(username,str) or not 1<=len(username.strip())<=50:raise Error('Usuario inválido')
+    def login(self, username, secret, audience='pos'):
+        if not isinstance(username,str) or '\0' in username or not 1<=len(username.strip())<=50:raise Error('Usuario inválido')
         credential({'secret':secret})
         username = username.strip().lower()
+        attempt_key = username if audience=='pos' else 'direction\0'+username
         now = int(time.time())
         denied = False
         with self.db(True) as db:
-            attempt = db.execute('SELECT * FROM login_attempts WHERE username=?', (username,)).fetchone()
+            attempt = db.execute('SELECT * FROM login_attempts WHERE username=?', (attempt_key,)).fetchone()
             if attempt and attempt['blocked_until'] > now:
                 raise Error('Demasiados intentos; espera 5 minutos', 429)
             user = db.execute('SELECT * FROM users WHERE username=? AND active=1', (username,)).fetchone()
+            eligible = user and (audience=='pos' or {'users.manage','reports.view'} <= self.permissions(db,user['id']))
             if not user or not password_matches(secret, user['password_hash']):
-                failures = (attempt['failures'] if attempt and attempt['blocked_until'] == 0 else 0) + 1
-                db.execute('INSERT OR REPLACE INTO login_attempts VALUES (?,?,?)',
-                           (username, failures, now + 300 if failures >= 5 else 0))
+                if eligible:
+                    failures = (attempt['failures'] if attempt and attempt['blocked_until'] == 0 else 0) + 1
+                    db.execute('INSERT OR REPLACE INTO login_attempts VALUES (?,?,?)',
+                               (attempt_key, failures, now + 300 if failures >= 5 else 0))
                 denied = True
+            elif not eligible:
+                raise Error('Acceso exclusivo de dirección',403)
             else:
-                db.execute('DELETE FROM login_attempts WHERE username=?', (username,))
+                db.execute('DELETE FROM login_attempts WHERE username=?', (attempt_key,))
                 db.execute('DELETE FROM sessions WHERE expires_at<?', (now,))
                 token = secrets.token_urlsafe(32)
                 db.execute('INSERT INTO sessions VALUES (?,?,?)',
-                           (hashlib.sha256(token.encode()).hexdigest(), user['id'], now + 12*3600))
+                           (session_hash(token,audience), user['id'], now + 12*3600))
                 self.audit(db, user['id'], 'login', user['id'], {})
         if denied:
             raise Error('Credenciales incorrectas', 401)
         return token
 
-    def session_user(self, token):
+    def session_user(self, token, audience='pos'):
         with self.db() as db:
             row = db.execute('SELECT u.id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.active=1',
-                             (hashlib.sha256(token.encode()).hexdigest(), int(time.time()))).fetchone()
+                             (session_hash(token,audience), int(time.time()))).fetchone()
             if not row:
                 raise Error('Inicia sesión', 401)
             return row[0]
+
+    def revoke_session(self, token, audience='pos'):
+        with self.db(True) as db:
+            db.execute('DELETE FROM sessions WHERE token_hash=?',(session_hash(token,audience),))
 
     def shift(self, db, uid, shift_id=None):
         row = db.execute('SELECT * FROM cash_shifts WHERE user_id=? AND closed_at IS NULL', (uid,)).fetchone()
@@ -573,21 +618,42 @@ class POS:
 
     def save_user(self, uid, data):
         with self.db(True) as db:
-            self.require(db,uid,'users.manage')
+            actor_role, allowed = self.account_access(db, uid)
             target = data.get('id')
-            if target==uid:
-                raise Error('Usa otro administrador para modificar tus permisos')
             permissions = data.get('permissions',[])
-            if not isinstance(permissions,list) or any(p not in PERMISSIONS for p in permissions):
+            if not isinstance(permissions,list) or any(not isinstance(p,str) or p not in PERMISSIONS for p in permissions):
                 raise Error('Permisos inválidos')
+            permissions = set(permissions)
+            old = None
+            old_permissions = set()
+            old_role = None
+            if target is not None:
+                target = integer(target, 'Usuario', 1)
+                old = db.execute('SELECT username,display_name,active FROM users WHERE id=?',(target,)).fetchone()
+                if old is None:
+                    raise Error('Usuario inexistente',404)
+                old_permissions = self.permissions(db, target)
+                old_role = self.account_role(db, target, old_permissions)
+                if not self.can_edit_account(db, uid, target, actor_role, allowed, old_permissions):
+                    raise Error('No tienes permiso para modificar esta cuenta',403)
+            role = data.get('role')
+            if role is None:
+                role = old_role or ('administrator' if permissions & ADMIN_PERMISSIONS else 'seller')
+            if not isinstance(role, str) or role not in ACCOUNT_ROLES:
+                raise Error('Puesto inválido')
+            if (permissions - allowed or (actor_role == 'supervisor' and role != 'seller')
+                    or (old and role == 'administrator')
+                    or (role != 'administrator' and permissions & ADMIN_PERMISSIONS)):
+                raise Error('No puedes asignar ese puesto o esos permisos',403)
             secret = data.get('secret','')
             if secret and not (len(secret)>=8 or (secret.isdigit() and len(secret)>=6)):
                 raise Error('Usa contraseña de 8 caracteres o PIN de al menos 6 dígitos')
-            if target:
-                if not data.get('active',1) and db.execute('SELECT 1 FROM cash_shifts WHERE user_id=? AND closed_at IS NULL',(target,)).fetchone():raise Error('Primero cierra el turno del usuario',409)
-                if not db.execute('SELECT 1 FROM users WHERE id=?',(target,)).fetchone():
-                    raise Error('Usuario inexistente',404)
-                db.execute('UPDATE users SET display_name=?,active=? WHERE id=?',(required(data,'display_name'),integer(data.get('active',1),'Activo',0,1),target))
+            display_name = required(data, 'display_name')
+            active = integer(data.get('active', 1), 'Activo', 0, 1)
+            if old:
+                if not active and db.execute('SELECT 1 FROM cash_shifts WHERE user_id=? AND closed_at IS NULL',(target,)).fetchone():raise Error('Primero cierra el turno del usuario',409)
+                username = old['username']
+                db.execute('UPDATE users SET display_name=?,active=? WHERE id=?',(display_name,active,target))
                 if secret:
                     db.execute('UPDATE users SET password_hash=? WHERE id=?',(password_hash(secret),target))
                 db.execute('DELETE FROM sessions WHERE user_id=?',(target,))
@@ -595,7 +661,18 @@ class POS:
             else:
                 if not secret:
                     raise Error('Contraseña o PIN obligatorio')
-                target = db.execute('INSERT INTO users(username,display_name,password_hash) VALUES (?,?,?)',(required(data,'username').lower(),required(data,'display_name'),password_hash(secret))).lastrowid
+                username = required(data,'username').lower()
+                if '\0' in username or len(username)>50:
+                    raise Error('Usuario inválido')
+                target = db.execute('INSERT INTO users(username,display_name,password_hash,active) VALUES (?,?,?,?)',(username,display_name,password_hash(secret),active)).lastrowid
+            db.execute('INSERT OR IGNORE INTO roles(name) VALUES (?)', (ACCOUNT_ROLES[role],))
+            db.execute('DELETE FROM user_roles WHERE user_id=?', (target,))
+            db.execute('INSERT INTO user_roles SELECT ?,id FROM roles WHERE name=?', (target, ACCOUNT_ROLES[role]))
             db.executemany('INSERT INTO user_permissions VALUES (?,?,?)',[(target,p,int(p in permissions)) for p in PERMISSIONS])
-            self.audit(db,uid,'user.save',target,{'permissions':permissions})
+            before = {'display_name':old['display_name'],'active':old['active'],
+                      'role':old_role,'permissions':sorted(old_permissions)} if old else {}
+            after = {'display_name':display_name,'active':active,'role':role,'permissions':sorted(permissions)}
+            self.audit(db,uid,'user.update' if old else 'user.create',target,{
+                'username':username,'actor_role':actor_role,'before':before,'after':after,
+                'credential_reset':bool(old and secret)})
             return {'id':target}

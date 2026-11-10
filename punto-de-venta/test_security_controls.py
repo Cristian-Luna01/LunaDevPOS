@@ -1,5 +1,6 @@
 """Pruebas adversarias aisladas; nunca usan cuentas ni datos del negocio."""
 import json,socket,threading,time,unittest
+from http.client import HTTPResponse
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request,urlopen
@@ -66,8 +67,16 @@ class ConnectionCapacity(unittest.TestCase):
         try:
             sock.sendall(b'GET / HTTP/1.0\r\n\r\n');self.assertTrue(entered.wait(2))
             with socket.create_connection(server.server_address,timeout=2) as second:
-                second.sendall(b'GET / HTTP/1.0\r\n\r\n');self.assertIn(b'503',second.recv(200))
-            release.set();self.assertIn(b'200',sock.recv(200));sock.close()
+                # The limit rejects at accept time, before reading any request bytes.
+                with HTTPResponse(second) as denied:
+                    denied.begin()
+                    self.assertEqual(denied.status,503)
+            release.set()
+            with HTTPResponse(sock) as accepted:
+                accepted.begin()
+                self.assertEqual(accepted.status,200)
+                self.assertEqual(accepted.read(),b'ok')
+            sock.close()
             deadline=time.monotonic()+2
             while time.monotonic()<deadline:
                 if server.connection_slots.acquire(False):server.connection_slots.release();break

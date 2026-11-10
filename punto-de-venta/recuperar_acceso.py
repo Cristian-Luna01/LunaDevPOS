@@ -20,7 +20,7 @@ def main():
  with pos.db(True) as db:
   db.execute('UPDATE users SET password_hash=? WHERE id=?',(password_hash(secret),row['id']))
   db.execute('DELETE FROM sessions WHERE user_id=?',(row['id'],))
-  db.execute('DELETE FROM login_attempts WHERE username=?',(row['username'],))
+  db.execute('DELETE FROM login_attempts WHERE username IN (?,?)',(row['username'],'direction\0'+row['username']))
   pos.audit(db,None,'user.local_access_recovery',row['id'],{})
  print('Acceso recuperado. Usuario: '+row['username'])
  print('Abre el programa e inicia sesión con tu nueva contraseña.')

@@ -1,7 +1,9 @@
 name: Verificar seguridad
 on:
   push:
+    branches: [main, pruebas]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

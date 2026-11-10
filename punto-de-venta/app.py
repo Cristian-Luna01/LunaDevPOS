@@ -3,7 +3,6 @@ import argparse
 import contextlib
 import datetime as dt
 import getpass
-import hashlib
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler
 from http_limits import ThreadingHTTPServer
@@ -14,13 +13,23 @@ import time
 import os
 import sqlite3
 from urllib.parse import urlparse, parse_qs
-from core import POS, Error, PERMISSIONS, ROOT, required, credential, integer, rounded
+from core import POS, Error, PERMISSIONS, ROOT, required, credential, integer, rounded, session_hash
 import inventory_io
 import analytics
 import profit
 import promotions
 import credit
 import branding
+
+FILE_PERMISSIONS = {
+    '/api/branding': ('users.manage',),
+    '/direccion/api/branding': ('users.manage','reports.view'),
+    '/api/inventory/import/preview': ('inventory.import',),
+    '/api/inventory/import/confirm': ('inventory.import',),
+    '/api/backup/preview': ('backup.manage',),
+    '/api/backup/restore': ('backup.manage',),
+}
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = 'FarmaciaPOS/1.0'
@@ -64,6 +73,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_request(self, write):
         # La espera de red nunca retiene el bloqueo de identidad/restauración.
+        upload_slot = None
         try:
             self._request_data=None
             host=self.headers.get('Host','')
@@ -74,9 +84,21 @@ class Handler(BaseHTTPRequestHandler):
                 if self.headers.get('Content-Type','').split(';')[0]!='application/json':raise Error('Usa application/json',415)
                 if self.headers.get('Transfer-Encoding'):raise Error('Transferencia no admitida',400)
                 path=urlparse(self.path).path
-                file_route=path in ('/api/branding','/direccion/api/branding','/api/inventory/import/preview','/api/inventory/import/confirm','/api/backup/preview','/api/backup/restore')
+                file_route=path in FILE_PERMISSIONS
                 length=int(self.headers.get('Content-Length','0'))
-                if not 0<length<=(90*1024*1024 if file_route else 262144):raise Error('Tamaño de solicitud inválido',413)
+                limit=3*1024*1024 if path.endswith('/branding') else 90*1024*1024 if file_route else 262144
+                if not 0<length<=limit:raise Error('Tamaño de solicitud inválido',413)
+                if file_route:
+                    pos=self.server.pos
+                    audience='direction' if path.startswith('/direccion/') else 'pos'
+                    cookie=SimpleCookie(self.headers.get('Cookie','')).get(f'{audience}_session_{self.server.server_port}')
+                    uid=pos.session_user(cookie.value if cookie else '',audience)
+                    with pos.db() as db:
+                        for permission in FILE_PERMISSIONS[path]:
+                            pos.require(db,uid,permission)
+                    if not pos.file_upload_slot.acquire(blocking=False):
+                        raise Error('Hay otro archivo en proceso. Vuelve a intentarlo.',503)
+                    upload_slot=pos.file_upload_slot
                 deadline=time.monotonic()+30;remaining=length;parts=[]
                 while remaining:
                     seconds=deadline-time.monotonic()
@@ -116,6 +138,9 @@ class Handler(BaseHTTPRequestHandler):
             self._defer_response=False;self.close_connection=True
             try:self.send(e.status if isinstance(e,Error) else 400,{'error':str(e) if isinstance(e,Error) else 'Solicitud inválida'})
             except OSError:pass
+        finally:
+            self._request_data=None
+            if upload_slot is not None:upload_slot.release()
 
     def handle_locked_request(self, write):
         try:
@@ -128,10 +153,6 @@ class Handler(BaseHTTPRequestHandler):
                     raise Error('Origen de solicitud no permitido',403)
                 if self.headers.get('Content-Type','').split(';')[0]!='application/json':
                     raise Error('Usa application/json',415)
-                length = int(self.headers.get('Content-Length','0'))
-                file_route=path in ('/api/branding','/direccion/api/branding','/api/inventory/import/preview','/api/inventory/import/confirm','/api/backup/preview','/api/backup/restore')
-                if not 0<length<=(90*1024*1024 if file_route else 262144):
-                    raise Error('Tamaño de solicitud inválido',413)
                 data = self._request_data
                 if not isinstance(data,dict):
                     raise Error('Objeto JSON requerido')
@@ -204,6 +225,11 @@ class Handler(BaseHTTPRequestHandler):
                 from external_backup import settings,configure
                 with pos.db() as db:pos.require(db,uid,'backup.manage')
                 return self.send(200,configure(pos,data.get('directory','')) if write else settings(pos))
+            if path=='/api/backup/key':
+                from backup_crypto import configure_phrase,phrase_path
+                with pos.db() as db:pos.require(db,uid,'backup.manage')
+                if write:configure_phrase(pos,data.get('passphrase'))
+                return self.send(200,{'configured':phrase_path(pos).is_file()})
             if path=='/api/backup/external/copy' and write:
                 from external_backup import write_copy
                 with pos.db() as db:
@@ -217,6 +243,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200,handle(pos,uid,path.rsplit('/',1)[-1],data,write))
             if path=='/api/credit' and not write:return self.send(200,credit.read(pos,uid,data))
             if path=='/api/credit/payment' and write:return self.send(200,credit.payment(pos,uid,data))
+            if path=='/api/privacy-notice':
+                import privacy
+                return self.send(200,privacy.save(pos,uid,data) if write else privacy.read(pos))
             if write and path=='/api/settings':return self.send(200,branding.save_settings(pos,uid,data))
             if write and path=='/api/branding':return self.send(200,branding.save(pos,uid,data))
             if write and path=='/api/promotions/save':return self.send(200,promotions.save(pos,uid,data))
@@ -233,8 +262,10 @@ class Handler(BaseHTTPRequestHandler):
             if not write and path=='/api/inventory/export':
                 body,filename,mime=inventory_io.export_inventory(pos,uid,data.get('format','json'))
                 return self.send(200,body,mime,filename=filename)
-            if not write and path=='/api/backup/export':
-                body,filename,mime=inventory_io.backup(pos,uid)
+            if path=='/api/backup/export':
+                from backup_crypto import validate_phrase
+                phrase=validate_phrase(data.get('passphrase')) if write else None
+                body,filename,mime=inventory_io.encrypted_backup(pos,uid,phrase)
                 return self.send(200,body,mime,filename=filename)
             file_operations={'/api/inventory/import/preview':inventory_io.preview,
                 '/api/inventory/import/confirm':inventory_io.import_inventory,
@@ -247,7 +278,7 @@ class Handler(BaseHTTPRequestHandler):
                 with pos.db(True) as db:
                     if db.execute('SELECT 1 FROM cash_shifts WHERE user_id=? AND closed_at IS NULL',(uid,)).fetchone():
                         raise Error('Cuenta el efectivo y cierra tu turno antes de cerrar sesión.',409)
-                    db.execute('DELETE FROM sessions WHERE token_hash=?',(hashlib.sha256(token.encode()).hexdigest(),))
+                    db.execute('DELETE FROM sessions WHERE token_hash=?',(session_hash(token),))
                 return self.send(200,{'ok':True},cookie=f'{cookie_name}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
             operations = {'/api/shifts/open':pos.open_shift,'/api/shifts/close':pos.close_shift,
               '/api/cash':pos.cash_movement,'/api/sales':pos.sale,'/api/returns':pos.return_sale,
@@ -294,23 +325,13 @@ class Handler(BaseHTTPRequestHandler):
         """Sesión independiente: la cookie del mostrador no abre Dirección."""
         cookie_name=f'direction_session_{self.server.server_port}'
         if write and path=='/direccion/api/login':
-            token=pos.login(required(data,'username'),credential(data))
-            uid=pos.session_user(token)
-            try:
-                with pos.db() as db:
-                    pos.require(db,uid,'users.manage')
-                    pos.require(db,uid,'reports.view')
-            except Error:
-                with pos.db(True) as db:
-                    db.execute('DELETE FROM sessions WHERE token_hash=?',(hashlib.sha256(token.encode()).hexdigest(),))
-                raise Error('Acceso exclusivo de dirección. Se requieren permisos de administrar usuarios y consultar informes.',403)
+            token=pos.login(required(data,'username'),credential(data),'direction')
             return self.send(200,{'ok':True},cookie=f'{cookie_name}={token}; HttpOnly; SameSite=Strict; Path=/direccion; Max-Age=43200')
         cookies=SimpleCookie(self.headers.get('Cookie',''))
         token=cookies[cookie_name].value if cookie_name in cookies else ''
-        uid=pos.session_user(token)
+        uid=pos.session_user(token,'direction')
         if write and path=='/direccion/api/logout':
-            with pos.db(True) as db:
-                db.execute('DELETE FROM sessions WHERE token_hash=?',(hashlib.sha256(token.encode()).hexdigest(),))
+            pos.revoke_session(token,'direction')
             return self.send(200,{'ok':True},cookie=f'{cookie_name}=; HttpOnly; SameSite=Strict; Path=/direccion; Max-Age=0')
         with pos.db() as db:
             pos.require(db,uid,'users.manage')
@@ -368,7 +389,12 @@ class Handler(BaseHTTPRequestHandler):
                     shift = dict(shift)
                     opened = db.execute("SELECT details FROM audit_log WHERE action='shift.open' AND entity_id=? ORDER BY id DESC LIMIT 1",(str(shift['id']),)).fetchone()
                     shift['shift_number'] = json.loads(opened['details']).get('shift_number') if opened else None
-                return {'user':user,'permissions':sorted(permissions),'permission_labels':PERMISSIONS,'shift':dict(shift) if shift else None}
+                try:
+                    account_role, account_permissions = pos.account_access(db,uid)
+                    account_management = {'role':account_role,'permissions':sorted(account_permissions)}
+                except Error:
+                    account_management = None
+                return {'user':user,'permissions':sorted(permissions),'permission_labels':PERMISSIONS,'shift':dict(shift) if shift else None,'account_management':account_management}
             if path=='/api/inventory/availability':
                 ids = [int(x) for x in data.get('ids','').split(',') if x]
                 if not ids or len(ids)>500:
@@ -415,8 +441,30 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/suppliers':
                 return [dict(r) for r in db.execute('SELECT * FROM suppliers WHERE active=1 ORDER BY business_name LIMIT 200')]
             if path=='/api/users':
-                pos.require(db,uid,'users.manage')
-                return [dict(r,permissions=sorted(pos.permissions(db,r['id']))) for r in db.execute('SELECT id,username,display_name,active FROM users ORDER BY username')]
+                role, allowed = pos.account_access(db,uid)
+                users = []
+                for row in db.execute('SELECT id,username,display_name,active FROM users ORDER BY username'):
+                    permissions = pos.permissions(db,row['id'])
+                    editable = pos.can_edit_account(db,uid,row['id'],role,allowed,permissions)
+                    if role == 'administrator' or editable:
+                        users.append(dict(row, permissions=sorted(permissions), editable=editable,
+                                          role=pos.account_role(db,row['id'],permissions)))
+                return users
+            if path=='/api/users/history':
+                role, _ = pos.account_access(db,uid)
+                if role != 'administrator':
+                    raise Error('Solo un administrador puede consultar este historial',403)
+                before = integer(int(data.get('before','9223372036854775807')), 'Registro', 1, 9223372036854775807)
+                rows = db.execute("""
+                    SELECT a.id,a.action,a.user_id,a.entity_id,a.created_at,a.details,
+                           actor.username AS actor,target.username AS target
+                    FROM audit_log a LEFT JOIN users actor ON actor.id=a.user_id
+                    LEFT JOIN users target ON target.id=a.entity_id
+                    WHERE a.action IN ('user.save','user.create','user.update','users.status','user.local_access_recovery')
+                          AND a.id<? ORDER BY a.id DESC LIMIT 51
+                    """,(before,)).fetchall()
+                return {'rows':[dict(row,details=json.loads(row['details'])) for row in rows[:50]],
+                        'next_before':rows[49]['id'] if len(rows)>50 else None}
             if path=='/api/shifts/report':
                 sid = int(data['id'])
                 row = db.execute('SELECT * FROM cash_shifts WHERE id=?',(sid,)).fetchone()

@@ -132,3 +132,6 @@ CREATE INDEX IF NOT EXISTS returns_created ON returns(created_at);
 CREATE INDEX IF NOT EXISTS customer_ledger_created ON customer_ledger(created_at);
 CREATE INDEX IF NOT EXISTS cash_movements_created ON cash_movements(created_at);
 PRAGMA user_version=11;
+CREATE TABLE IF NOT EXISTS privacy_notice(
+ id INTEGER PRIMARY KEY CHECK(id=1), responsible TEXT NOT NULL, address TEXT NOT NULL,
+ purposes TEXT NOT NULL, contact TEXT NOT NULL, full_notice TEXT NOT NULL);

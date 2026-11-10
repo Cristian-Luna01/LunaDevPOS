@@ -15,17 +15,22 @@ def status(pos,uid,kind,data):
  table,permission={'customers':('customers','customers.manage'),'suppliers':('suppliers','suppliers.manage'),'users':('users','users.manage')}[kind]
  target=integer(data.get('id'),'Registro',1);active=integer(data.get('active'),'Estado',0,1)
  with pos.db(True) as db:
-  pos.require(db,uid,permission);row=db.execute('SELECT * FROM '+table+' WHERE id=?',(target,)).fetchone()
+  if kind=='users':
+   role,allowed=pos.account_access(db,uid)
+  else:
+   pos.require(db,uid,permission)
+  row=db.execute('SELECT * FROM '+table+' WHERE id=?',(target,)).fetchone()
   if not row:raise Error('Registro inexistente',404)
+  if kind=='users' and not pos.can_edit_account(db,uid,target,role,allowed,pos.permissions(db,target)):
+   raise Error('No tienes permiso para modificar esta cuenta',403)
   if not active and kind=='customers':
    debt=db.execute('SELECT COALESCE(SUM(amount_cents),0) FROM customer_ledger WHERE customer_id=?',(target,)).fetchone()[0]
    if debt:raise Error('El cliente tiene deuda o saldo pendiente. Liquida su cuenta antes de darlo de baja',409)
   if not active and kind=='users':
-   if target==uid:raise Error('No puedes dar de baja la cuenta con la que estás trabajando',409)
    if db.execute('SELECT 1 FROM cash_shifts WHERE user_id=? AND closed_at IS NULL',(target,)).fetchone():raise Error('El usuario tiene un turno abierto. Ciérralo antes de darlo de baja',409)
-   admins=[r[0] for r in db.execute('SELECT id FROM users WHERE active=1 AND id!=?',(target,)) if 'users.manage' in pos.permissions(db,r[0])]
-   if 'users.manage' in pos.permissions(db,target) and not admins:raise Error('Debe conservarse al menos un administrador activo',409)
   db.execute('UPDATE '+table+' SET active=? WHERE id=?',(active,target))
   if kind=='users':db.execute('DELETE FROM sessions WHERE user_id=?',(target,))
-  pos.audit(db,uid,kind+'.status',target,{'before':row['active'],'after':active,'reason':required(data,'reason')})
+  details={'before':row['active'],'after':active,'reason':required(data,'reason')}
+  if kind=='users':details.update(username=row['username'],actor_role=role)
+  pos.audit(db,uid,kind+'.status',target,details)
   return {'id':target,'active':active}
