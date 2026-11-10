@@ -1,6 +1,10 @@
 """Aviso configurable del comercio. No se replica a la cuenta central."""
 from core import Error
 
+TABLE = """CREATE TABLE IF NOT EXISTS privacy_notice(
+ id INTEGER PRIMARY KEY CHECK(id=1), responsible TEXT NOT NULL, address TEXT NOT NULL,
+ purposes TEXT NOT NULL, contact TEXT NOT NULL, full_notice TEXT NOT NULL)"""
+
 FIELDS = {'responsible': 160, 'address': 400, 'purposes': 1000,
           'contact': 250, 'full_notice': 12000}
 

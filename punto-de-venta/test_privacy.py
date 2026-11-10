@@ -5,7 +5,7 @@ import unittest
 from urllib.error import HTTPError
 
 from branch_sync import BranchSync, database
-from core import fingerprint
+from core import POS, fingerprint
 import inventory_io
 import test_customer_http
 
@@ -15,6 +15,15 @@ class PrivacyTest(unittest.TestCase):
     tearDown = test_customer_http.CustomerHTTPTest.tearDown
     receive = test_customer_http.CustomerHTTPTest.receive
     request = test_customer_http.CustomerHTTPTest.request
+
+    def test_existing_version_11_adds_notice_before_exporting_a_backup(self):
+        with self.pos.db(True) as db:
+            db.execute('DROP TABLE privacy_notice')
+        updated = POS(self.pos.path)
+        raw, _, _ = inventory_io.backup(updated, 1)
+        saved = inventory_io.read_backup({'file_base64': base64.b64encode(raw).decode()})
+        self.assertEqual(saved['tables']['privacy_notice'], [])
+        self.assertEqual(saved['tables']['customers'][0]['id'], 1)
 
     def test_notice_authentication_and_backup_compatibility(self):
         with self.request('/api/privacy-notice') as response:
