@@ -2,7 +2,9 @@ name: Verificar código
 on:
   workflow_dispatch:
   push:
+    branches: [main, pruebas]
   pull_request:
+    branches: [main]
 permissions:
   contents: read
 jobs:

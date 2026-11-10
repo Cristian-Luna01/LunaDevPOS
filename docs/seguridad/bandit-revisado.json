@@ -9,15 +9,15 @@
     "severity": "MEDIUM",
     "line_at_review": 132
   },
-  "punto-de-venta/app.py|B608|ce93299339837e3f9fb3d79330454247da73fb5c26fa5ee92160fe78992c80c6": {
+  "punto-de-venta/app.py|B608|9b3cc4d1889c0aad8a98ab9c6f4984b8cfeb30bc34c97187075b423e5865dfe1": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
     "severity": "MEDIUM",
-    "line_at_review": 377
+    "line_at_review": 403
   },
-  "punto-de-venta/app.py|B608|672ed61d9a81c277d36d06ddca460ee1bbaff6efd96c7563b1178c1b3361b50d": {
+  "punto-de-venta/app.py|B608|a7c420f6053374d80f7a492971acec801de34167ff19a32f852dff4bfefa4947": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
     "severity": "MEDIUM",
-    "line_at_review": 465
+    "line_at_review": 513
   },
   "punto-de-venta/billing.py|B608|7e670e9c22ddb9bd4f56a22bffcea7d79f45114ed2fb35f75152fe3fde8b3dd6": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
@@ -34,10 +34,10 @@
     "severity": "MEDIUM",
     "line_at_review": 142
   },
-  "punto-de-venta/branch_sync.py|B110|3a38ebe9f7741e44cb50b3392a6883f320a10339bc256908474604b37c359b3b": {
+  "punto-de-venta/branch_sync.py|B110|a37380f5bcfa3a41f91f0906abd26dffdf6d8f7b87f848f44e591f990ef31eb5": {
     "reason": "Último envío best-effort durante stop(); no debe impedir cerrar el POS. El bucle normal ya registra un mensaje genérico de fallo y conserva el envío para reintento. No suprime comprobaciones de autorización.",
     "severity": "LOW",
-    "line_at_review": 240
+    "line_at_review": 247
   },
   "punto-de-venta/card_fees.py|B608|72572389e3546e2971a87ae96147e9d1b73a781eb5acaa2856a97b770b429591": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
@@ -54,15 +54,15 @@
     "severity": "MEDIUM",
     "line_at_review": 13
   },
-  "punto-de-venta/core.py|B608|49fe0e65516d447cc737058e6c485d12ed554006353e2e31996ca153fac1edf0": {
+  "punto-de-venta/core.py|B608|21b89726d73bc1ab6961e07ec804292fdb546e50f8dfb66c89bd206e855c17d3": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
     "severity": "MEDIUM",
-    "line_at_review": 568
+    "line_at_review": 613
   },
-  "punto-de-venta/core.py|B608|200f5e85faf07b39e21c17bdcf443e2471853bad2fee1d2c77bd3711b60a3895": {
+  "punto-de-venta/core.py|B608|47e7490c672cf203f3b4456a351185ccba45392decc8411e5855db3c8334476c": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
     "severity": "MEDIUM",
-    "line_at_review": 570
+    "line_at_review": 615
   },
   "punto-de-venta/desktop.py|B608|14d4b131c58eed16f7951f33717b1f4448f32b66b288405f49da259756a30988": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
@@ -84,15 +84,15 @@
     "severity": "MEDIUM",
     "line_at_review": 10
   },
-  "punto-de-venta/entity_management.py|B608|221cb110bea6d4350415385e86f5e57a4a3f4e6e606de77d151df140c6740b07": {
-    "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
+  "punto-de-venta/entity_management.py|B608|8d8ef3512e06498d0bd91fbcf5b4320f2c6c7f08343dcb6510df199da60cf2a1": {
+    "reason": "La tabla se elige del mapa interno de clientes, proveedores y usuarios. El ID se pasa como parámetro después de verificar permisos.",
     "severity": "MEDIUM",
-    "line_at_review": 18
+    "line_at_review": 22
   },
-  "punto-de-venta/entity_management.py|B608|bc54d4c9ade67c8ffcadca232a17a0913040560e3b9b5b6cfd1222d47d123772": {
-    "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
+  "punto-de-venta/entity_management.py|B608|9a9350a5de959653f9bc91746bea396ab7b481cd8fd8ffbc1fce7bb732c8b369": {
+    "reason": "La tabla se elige del mapa interno. El estado y el ID validados se pasan como parámetros. El control de jerarquía se aplica antes del cambio.",
     "severity": "MEDIUM",
-    "line_at_review": 28
+    "line_at_review": 31
   },
   "punto-de-venta/history_xlsx.py|B405|6094073bd75b669ac47b8ddadaf4bcce7334601cc0cae8a493cce0cf3e6af330": {
     "reason": "Solo se construye XML con Element/SubElement/tostring para exportar Excel; no se analiza XML entrante en este mÃ³dulo.",
@@ -114,55 +114,50 @@
     "severity": "LOW",
     "line_at_review": 86
   },
-  "punto-de-venta/inventory_io.py|B608|1f335731ba205d6f0bac94a47416e035b60c293f5cfa8e854275e1ccd09a2e1c": {
+  "punto-de-venta/inventory_io.py|B608|0386bd516fc1ec1d02fc5fcbec8529cf48ee2392da74117937b4c09f0e6ce071": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
     "severity": "MEDIUM",
-    "line_at_review": 155
+    "line_at_review": 156
   },
-  "punto-de-venta/inventory_io.py|B608|6e910d169b5ce67156a59ca83605344434dc310ea4beb1b549282e02a5ef64ad": {
+  "punto-de-venta/inventory_io.py|B608|4d1464af0bc96001d55bdad77375ad838154a3d2b65d30e8bfe0ffde7545df9b": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
     "severity": "MEDIUM",
-    "line_at_review": 212
+    "line_at_review": 215
   },
-  "punto-de-venta/inventory_io.py|B608|0749cab398d652302b773d18afa0283ad88c641facb44b9c9c5fb89c29f47963": {
+  "punto-de-venta/inventory_io.py|B608|9ffc83a76310de2779750d5e07eb94ef017a0b3c5bca0605929b4938c4220243": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
     "severity": "MEDIUM",
-    "line_at_review": 218
+    "line_at_review": 221
   },
-  "punto-de-venta/inventory_io.py|B608|16d11ad24ef894f756f6df0e98576999c6b0e0d13c45005a1a8bc880c09410a0": {
+  "punto-de-venta/inventory_io.py|B608|9b4db3c207fe751253aa3eb787b4f1d4b87404601178b91ecd5cbbd15d6f3781": {
+    "reason": "El nombre de la tabla proviene de TABLES, la lista interna fija del respaldo. Se verifica el permiso antes de serializar.",
+    "severity": "MEDIUM",
+    "line_at_review": 276
+  },
+  "punto-de-venta/inventory_io.py|B608|00d6dcef36175dec449092c3e014d66451ff3ba047ea69150f63c452b841baf8": {
+    "reason": "Los nombres provienen de una tupla de tablas fija. Esta consulta comprueba que la instalación esté vacía antes de restaurar.",
+    "severity": "MEDIUM",
+    "line_at_review": 323
+  },
+  "punto-de-venta/inventory_io.py|B608|afb9078859f834b6d80904182f212cbd4150bc8b90c365583b15e6fba72d0378": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
     "severity": "MEDIUM",
-    "line_at_review": 268
+    "line_at_review": 357
   },
-  "punto-de-venta/inventory_io.py|B608|b6074eb468785f6b5165ebe667c5c876b32b94d7afee6a8de3ec4dda70edf186": {
+  "punto-de-venta/inventory_io.py|B608|7616f2774fea47eadce1692c7cc7fdd8b4436e1aa0b3ab4c45a9dd49d9bbd26e": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
     "severity": "MEDIUM",
-    "line_at_review": 308
+    "line_at_review": 362
   },
-  "punto-de-venta/inventory_io.py|B608|0b09d7350d1d384af62beba2f4cce4a38817a69c2319bb34770a3449b1a2db8f": {
-    "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
-    "severity": "MEDIUM",
-    "line_at_review": 340
-  },
-  "punto-de-venta/inventory_io.py|B608|fdf4fe4c275a8f8a30b6698d64c09da093e550f02742ceb73083c15dd97dbce8": {
-    "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
-    "severity": "MEDIUM",
-    "line_at_review": 345
-  },
-  "punto-de-venta/owner_access.py|B404|f8b9afb2c0fea5007c0a428ac3ab8fd4dc472ad751d2d62207763fa1583d055e": {
-    "reason": "El mÃ³dulo subprocess se usa para ejecutar componentes locales mediante lista de argumentos y sin shell=True; se revisan por separado las llamadas.",
+  "punto-de-venta/owner_access.py|B404|0ceb3c1b9f6129f7ab83bb587e296f0c9209e801bc20dbb7d4ee1e3793bc310a": {
+    "reason": "subprocess inicia el conector de distribución con ruta fija y lista de argumentos. No se usa shell y el correo se valida antes de incorporarlo como argumento.",
     "severity": "LOW",
     "line_at_review": 8
   },
-  "punto-de-venta/owner_access.py|B104|f431ce8dca66c883649561bccf7a30f6c165bbc1c8be14da78fc9c6ba58dc574": {
-    "reason": "ExcepciÃ³n de despliegue: acceso LAN opcional solicitado por el administrador, filtrado a IPv4 privada y Host permitido; no habilita mutaciones remotas. HTTP LAN debe limitarse a red confiable; HTTPS central es el modo recomendado.",
-    "severity": "MEDIUM",
-    "line_at_review": 109
-  },
-  "punto-de-venta/owner_access.py|B603|d639c4d227a6c7a2fa938a9e1378d3d4be1756fd633555b63612d03870b47cb2": {
+  "punto-de-venta/owner_access.py|B603|ed8e9a695d2380caf81294ceb7cd1c5f51691282a3d9017327d1a178146b2da4": {
     "reason": "Ejecutable local absoluto y lista de argumentos, sin intÃ©rprete de comandos: PowerShell de SystemRoot con archivo generado/escapado, POS instalado, conector empaquetado o copia temporal del desinstalador.",
     "severity": "LOW",
-    "line_at_review": 132
+    "line_at_review": 110
   },
   "punto-de-venta/profit.py|B608|94f37467ccd3ab0985199b7af10b994b2140ea0b0c87449e0e800608dea97eed": {
     "reason": "Los identificadores y fragmentos SQL proceden de listas/ramas internas o del esquema local, no de texto del cliente; los valores se pasan como parÃ¡metros. RevisiÃ³n de cada ubicaciÃ³n: app, billing, card_fees, catalog_search, core, desktop, direction_replica, entity_management, inventory_io, profit y ticket_history.",
