@@ -2,7 +2,7 @@
 
 Punto de venta de escritorio para Windows, con inventario local, caja y consulta central para el dueño de uno o varios establecimientos.
 
-**Versión preparada: 0.2.0-rc.2 · pruebas controladas · 26 de octubre de 2026.**
+**Versión publicada: 0.2.0-rc.3 · pruebas controladas · 10 de noviembre de 2026.**
 
 Esta entrega incorpora la [evaluación interna de seguridad y capacidad](docs/seguridad/AUDITORIA-2026-10-26.md). Incluye alcance, pruebas, hallazgos y requisitos de despliegue pendientes; no constituye certificación ni garantía de ausencia de errores. Ver también [SECURITY.md](SECURITY.md).
 
@@ -14,7 +14,7 @@ El [asistente de firma local](herramientas/Firma-local-pruebas/LEEME.md) permite
 
 ## Descargar e instalar
 
-[Ver versiones e instaladores](https://github.com/Cristian-Luna01/LunaDevPOS/releases)
+[Descargar LunaDev POS 0.2.0-rc.3](https://github.com/Cristian-Luna01/LunaDevPOS/releases/tag/v0.2.0-rc.3) · [Ver todas las versiones](https://github.com/Cristian-Luna01/LunaDevPOS/releases)
 
 El instalador y el paquete con asistente y manual se distribuyen en **Releases**. Descarga el instalador `.exe`. Si necesitas publicar el panel, descarga también `Kit-Pagina-LunaDevPOS.zip` y extrae su contenido. El manual y `EMPIEZA-AQUI.txt` se ofrecen por separado. En Windows 10/11 de 64 bits el instalador incluye el motor necesario; la computadora de caja no necesita Python ni Node.js.
 
