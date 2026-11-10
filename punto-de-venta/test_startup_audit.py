@@ -1,4 +1,5 @@
 import contextlib, io, sqlite3, tempfile, unittest, runpy
+from http.server import ThreadingHTTPServer as LegacyHTTPServer
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import app,iniciar,recuperar_acceso,core,migrations,inventory_io
@@ -30,6 +31,10 @@ class StartupAuditTest(unittest.TestCase):
    self.assertIsNotNone(iniciar.serve_available(self.pos,start=10001,stop=10002));self.assertEqual(create.call_count,2)
   with patch('app.ThreadingHTTPServer',side_effect=OSError(98,'busy')),self.assertRaises(RuntimeError):iniciar.serve_available(self.pos,start=10001,stop=10002)
   with patch('app.ThreadingHTTPServer',side_effect=OSError(1,'unexpected')),self.assertRaises(OSError):iniciar.serve_available(self.pos)
+ def test_existing_http_listener_cannot_share_the_pos_port(self):
+  with LegacyHTTPServer(('127.0.0.1',0),app.Handler) as legacy:
+   with self.assertRaisesRegex(RuntimeError,'puertos'):
+    iniciar.serve_available(self.pos,start=legacy.server_port,stop=legacy.server_port)
  def test_local_recovery_only_on_isolated_database(self):
   self.pos.initialize('qa','test-password');token=self.pos.login('qa','test-password')
   def run(inputs,passwords):
