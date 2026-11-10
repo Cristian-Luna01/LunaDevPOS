@@ -6,6 +6,10 @@ import json
 from pathlib import Path
 from inventory_io import backup_document
 from external_backup import write_copy
+from backup_crypto import PORTABLE, LOCAL, automatic_phrase, seal, unseal
+from core import Error, fingerprint
+
+AUTOMATIC_NAME = re.compile(r'turno-\d+-(\d{8}T\d{12}Z)\.botica(?:\.json)?')
 
 
 def cleanup(pos):
@@ -14,7 +18,7 @@ def cleanup(pos):
     if not directory.is_dir():
         return
     for candidate in directory.iterdir():
-        match = re.fullmatch(r'turno-\d+-(\d{8}T\d{12}Z)\.botica\.json', candidate.name)
+        match = AUTOMATIC_NAME.fullmatch(candidate.name)
         if not match or candidate.is_symlink() or not candidate.is_file():
             continue
         try:
@@ -30,21 +34,26 @@ def after_shift(pos, shift_id):
     try:
         with pos.request_lock:
             directory.mkdir(parents=True, exist_ok=True)
+            phrase = automatic_phrase(pos)
             with pos.db() as db:
                 closed = dict(db.execute('SELECT * FROM cash_shifts WHERE id=?',(shift_id,)).fetchone())
-                raw, _, _ = backup_document(db)
-            for candidate in sorted(directory.glob(f'turno-{shift_id}-*.botica.json'), reverse=True):
+            for candidate in sorted(directory.glob(f'turno-{shift_id}-*.botica'), reverse=True):
                 try:
-                    document = json.loads(candidate.read_bytes())
-                    from core import fingerprint
+                    if candidate.is_symlink():continue
+                    encrypted = candidate.read_bytes()
+                    if not encrypted.startswith(PORTABLE if phrase else LOCAL):continue
+                    document = json.loads(unseal(encrypted,phrase))
                     digest = document.pop('sha256')
                     saved = next(row for row in document['tables']['cash_shifts'] if row['id']==shift_id)
                     if digest == fingerprint(document) and saved == closed:
                         return {'ok':True,'path':str(candidate),'retention_days':30,'external':write_copy(pos,candidate)}
-                except (OSError, ValueError, KeyError, StopIteration, TypeError):
+                except (Error,OSError, ValueError, KeyError, StopIteration, TypeError):
                     pass
+            with pos.db() as db:
+                raw, _, _ = backup_document(db)
+            raw = seal(raw,phrase)
             now = dt.datetime.now(dt.timezone.utc)
-            target = directory / f'turno-{shift_id}-{now:%Y%m%dT%H%M%S%fZ}.botica.json'
+            target = directory / f'turno-{shift_id}-{now:%Y%m%dT%H%M%S%fZ}.botica'
             temporary = target.with_suffix('.tmp')
             try:
                 with temporary.open('xb') as stream:

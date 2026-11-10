@@ -4,7 +4,7 @@ from pathlib import Path
 root=Path(__file__).resolve().parent.parent;source=root/'punto-de-venta'
 if sys.version_info[:3]!=(3,14,10):raise SystemExit('Compila con Python oficial 3.14.10 y requirements-build.lock; no reutilices el motor anterior.')
 parser=argparse.ArgumentParser();parser.add_argument('--output',default=str(root/'dist'));args=parser.parse_args();output=Path(args.output).resolve();output.mkdir(parents=True,exist_ok=True)
-for name,version in [('PySide6','6.12.0'),('PyInstaller','6.22.3'),('openpyxl','3.1.5')]:
+for name,version in [('PySide6','6.12.0'),('PyInstaller','6.22.3'),('openpyxl','3.1.5'),('cryptography','50.0.2')]:
     if metadata.version(name)!=version:raise SystemExit('Instala requirements-build.lock en un entorno limpio: '+name)
 if (root/'VERSION').read_text().strip()!=__import__('runpy').run_path(str(source/'build_info.py'))['VERSION']:raise SystemExit('Versiones inconsistentes')
 def build(spec,dist,work):
@@ -21,7 +21,7 @@ if runtime_ca.is_file():shutil.copy2(runtime_ca,program/'_internal'/runtime_ca.n
 shutil.copy2(program/'LunaDevPOS.exe',program/'NuvariaPOSEscritorio.exe')
 licenses=program/'licenses';licenses.mkdir(exist_ok=True)
 components=[]
-for name in ['PySide6','PySide6_Essentials','PySide6_Addons','PySide6_WebEngine','PySide6_Pdf','shiboken6','PyInstaller','openpyxl','et-xmlfile']:
+for name in ['PySide6','PySide6_Essentials','PySide6_Addons','PySide6_WebEngine','PySide6_Pdf','shiboken6','PyInstaller','openpyxl','et-xmlfile','cryptography','cffi','pycparser']:
     dist=metadata.distribution(name);components.append({'name':name,'version':dist.version,'license':dist.metadata.get('License'),'home':dist.metadata.get('Home-page')})
     for file in dist.files or []:
         if 'license' in str(file).lower() and dist.locate_file(file).is_file():

@@ -74,12 +74,15 @@ class ReliabilityTest(unittest.TestCase):
   with self.assertRaises(Error):self.pos.sale(1,body)
   with self.pos.db() as db:self.assertEqual(db.execute('SELECT COUNT(*) FROM sales').fetchone()[0],0)
  def test_external_copy_verified_and_unavailable_is_reported(self):
+  from backup_crypto import configure_phrase, unseal
+  phrase='frase de respaldo de pruebas'
   with tempfile.TemporaryDirectory() as directory:
    external_backup.configure(self.pos,directory)
+   configure_phrase(self.pos,phrase)
    report=self.pos.close_shift(1,{'shift_id':self.sid,'counted_cents':10000})
    result=report['automatic_backup'];self.assertTrue(result['external']['ok'])
    self.assertEqual(Path(result['path']).read_bytes(),Path(result['external']['path']).read_bytes())
-   document=json.loads(Path(result['path']).read_bytes());self.assertEqual(document['version'],11)
+   document=json.loads(unseal(Path(result['path']).read_bytes(),phrase));self.assertEqual(document['version'],12)
    self.assertIn('operation_intents',document['tables'])
   result=automatic_backup.after_shift(self.pos,self.sid)
   self.assertTrue(result['ok']);self.assertFalse(result['external']['ok'])

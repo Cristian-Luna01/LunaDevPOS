@@ -20,6 +20,7 @@ TABLES += FISCAL_TABLES
 from card_fees import TABLES as FEE_TABLES
 TABLES += FEE_TABLES
 TABLES += ['operation_requests','operation_intents']
+TABLES += ['privacy_notice']
 
 def file_bytes(data):
     try:
@@ -155,9 +156,9 @@ def revision(db):
     return fingerprint({t:[tuple(r) for r in db.execute('SELECT * FROM '+t+' ORDER BY id')] for t in ('products','batches')})
 
 def preview(pos,uid,data):
-    products,summary=parse_file(data)
     with pos.db() as db:
         pos.require(db,uid,'inventory.import')
+        products,summary=parse_file(data)
         existing={r[0] for r in db.execute('SELECT barcode FROM products')}
         summary.update(existing=sum(p['barcode'] in existing for p in products),revision=revision(db))
     summary['new']=summary['candidates']-summary['existing']
@@ -167,6 +168,8 @@ def preview(pos,uid,data):
     return summary
 
 def import_inventory(pos,uid,data):
+    with pos.db() as db:
+        pos.require(db,uid,'inventory.import')
     products,summary=parse_file(data)
     if summary['issues'] and data.get('skip_invalid') is not True:
         raise Error('Corrige las filas con errores o selecciona omitirlas antes de importar')
@@ -264,20 +267,28 @@ def backup(pos,uid):
         pos.require(db,uid,'backup.manage')
         return backup_document(db)
 
+def encrypted_backup(pos,uid,phrase=None):
+    from backup_crypto import seal
+    raw, filename, _ = backup(pos,uid)
+    return seal(raw,phrase),filename.removesuffix('.json'),'application/octet-stream'
+
 def backup_document(db):
         tables={name:[dict(r) for r in db.execute('SELECT * FROM '+name)] for name in TABLES}
-        document={'format':'botica-backup','version':11,'created_at':dt.datetime.now(dt.timezone.utc).isoformat(),'tables':tables}
+        document={'format':'botica-backup','version':12,'created_at':dt.datetime.now(dt.timezone.utc).isoformat(),'tables':tables}
         document['sha256']=fingerprint(document)
         return json.dumps(document,ensure_ascii=False,separators=(',',':')).encode(),f'respaldo-{dt.datetime.now():%Y%m%d-%H%M%S}.botica.json','application/json'
 
 def read_backup(data):
-    try:document=json.loads(file_bytes(data).decode('utf-8-sig'))
+    from backup_crypto import unseal
+    try:document=json.loads(unseal(file_bytes(data),data.get('passphrase')).decode('utf-8-sig'))
     except (ValueError,UnicodeError):raise Error('Respaldo ilegible')
-    if not isinstance(document,dict) or document.get('format')!='botica-backup' or document.get('version') not in (2,3,4,5,6,7,8,9,10,11):
+    if not isinstance(document,dict) or document.get('format')!='botica-backup' or document.get('version') not in (2,3,4,5,6,7,8,9,10,11,12):
         raise Error('Selecciona un respaldo completo Botica compatible (.botica.json)')
     digest=document.pop('sha256',None)
     if digest!=fingerprint(document):raise Error('El respaldo está incompleto o fue modificado; no coincide su verificación')
     tables=document.get('tables')
+    if document['version']<12 and isinstance(tables,dict):
+        tables.setdefault('privacy_notice',[])
     if document['version']<11 and isinstance(tables,dict):
         tables.setdefault('operation_requests',[]);tables.setdefault('operation_intents',[])
     if document['version']<10 and isinstance(tables,dict):
@@ -305,24 +316,30 @@ def read_backup(data):
     return document
 
 def empty_for_restore(db):
+    if db.execute('SELECT id FROM users LIMIT 1 OFFSET 1').fetchone():
+        return False
+    if db.execute("SELECT 1 FROM audit_log WHERE action IN ('user.save','user.create','user.update','users.status','user.local_access_recovery','backup.restore') LIMIT 1").fetchone():
+        return False
     return not any(db.execute('SELECT 1 FROM '+name+' LIMIT 1').fetchone() for name in
         ('products','suppliers','customers','cash_shifts','sales','inventory_imports'))
 
 def restore_preview(pos,uid,data):
-    document=read_backup(data)
     with pos.db() as db:
         pos.require(db,uid,'backup.manage')
         eligible=empty_for_restore(db)
+    document=read_backup(data)
     return {'eligible':eligible,'created_at':document['created_at'],
        'counts':{name:len(document['tables'][name]) for name in ('products','batches','sales','users','customers','customer_ledger','cash_shifts')}}
 
 def restore(pos,uid,data):
+    with pos.db() as db:
+        pos.require(db,uid,'backup.manage')
     document=read_backup(data)
     if data.get('confirmation')!='RESTAURAR':raise Error('Escribe RESTAURAR para confirmar')
     with pos.db(True) as db:
         pos.require(db,uid,'backup.manage')
         if not empty_for_restore(db):
-            raise Error('Restaura en una instalación vacía, sin productos, proveedores, clientes ni turnos. La base actual no se sustituirá.',409)
+            raise Error('Restaura en una instalación nueva, con solo la cuenta inicial y sin historial ni datos de operación.',409)
         # Solo tablas y columnas del esquema local; jamás se ejecuta SQL del archivo.
         for name in TABLES:
             columns={r['name'] for r in db.execute('PRAGMA table_info('+name+')')}

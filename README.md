@@ -10,6 +10,8 @@ Para actualizar, consulta [la guía de actualización](docs/GUIA-ACTUALIZACION-0
 
 La receta vigente del instalador está en [Compilación](docs/COMPILACION.md). Las pruebas automáticas están en `.github/workflows/verificar.yml`.
 
+El [asistente de firma local](herramientas/Firma-local-pruebas/LEEME.md) permite firmar una copia de un ejecutable para desarrollo. No es una firma válida para distribuir a clientes.
+
 ## Descargar e instalar
 
 [Ver versiones e instaladores](https://github.com/Cristian-Luna01/LunaDevPOS/releases)

@@ -8,7 +8,7 @@ function notify(message){$('notice').textContent=message;$('notice').hidden=fals
 async function requestApi(path,data){const r=await fetch('/api'+path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json','X-POS-Request':'1'}:{},body:data?JSON.stringify(data):undefined});const body=await r.json();if(!r.ok){if(r.status===401){$('workspace').hidden=true;$('login').hidden=false;}throw Error(body.error||'No se pudo completar la operación');}if(path==='/shifts/close'&&body.automatic_backup?.external&&!body.automatic_backup.external.ok)setTimeout(()=>notify(body.automatic_backup.external.warning),100);return body;}
 async function api(path,data){if(data&&window.pendingOperations?.handles(path))return window.pendingOperations.run(path,data);return requestApi(path,data);}
 const act = fn => async (...args) => {try{await fn(...args);}catch(e){notify(e.message);}};
-async function refresh(requireOpening=false){me=await api('/me');await window.refreshCardFees?.();document.dispatchEvent(new CustomEvent('brand-permission',{detail:me.permissions.includes('users.manage')}));$('identity').textContent=me.user.display_name;$('shiftStatus').textContent=me.shift?(me.shift.shift_number?`Turno ${me.shift.shift_number}`:'Turno abierto'):'Sin turno abierto';$('gateAdmin').hidden=!me.permissions.includes('users.manage');$('openShift').disabled=!!me.shift;$('closeForm').hidden=!me.shift;document.querySelectorAll('[data-permission]').forEach(b=>b.hidden=!me.permissions.includes(b.dataset.permission));$('workspace').hidden=false;$('login').hidden=true;await Promise.all([searchProducts(),loadCustomers()]);await window.pendingOperations?.recover();if(requireOpening&&me.permissions.includes('sell')&&!me.shift)showShiftGate();}
+async function refresh(requireOpening=false){me=await api('/me');await window.refreshCardFees?.();document.dispatchEvent(new CustomEvent('brand-permission',{detail:me.permissions.includes('users.manage')}));$('identity').textContent=me.user.display_name;$('shiftStatus').textContent=me.shift?(me.shift.shift_number?`Turno ${me.shift.shift_number}`:'Turno abierto'):'Sin turno abierto';$('gateAdmin').hidden=!me.permissions.includes('users.manage');$('openShift').disabled=!!me.shift;$('closeForm').hidden=!me.shift;document.querySelectorAll('[data-permission]').forEach(b=>b.hidden=!me.permissions.includes(b.dataset.permission));$('users').hidden=!me.account_management;$('workspace').hidden=false;$('login').hidden=true;await Promise.all([searchProducts(),loadCustomers()]);await window.pendingOperations?.recover();if(requireOpening&&me.permissions.includes('sell')&&!me.shift)showShiftGate();}
 $('loginForm').onsubmit=act(async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));await api('/login',d);document.dispatchEvent(new CustomEvent('login-user-confirmed',{detail:d.username}));$('notice').hidden=true;e.target.reset();await refresh(true);});
 $('logout').onclick=act(async()=>{me=await api('/me');if(me?.shift){$('shiftGate').hidden=true;$('workspace').hidden=false;document.querySelector('[data-view="cash"]').click();notify('Antes de salir, cuenta el efectivo y confirma el cierre de turno.');$('closeForm').elements.counted.focus();return;}await api('/logout',{});$('shiftGate').hidden=true;cart=[];pendingSale=null;me=null;currentView='checkout';document.querySelectorAll('.view').forEach(v=>v.hidden=v.id!=='checkout');$('pageTitle').textContent='Mostrador';$('workspace').classList.add('checkout-mode');$('notice').hidden=true;renderCart();$('dialog').close();$('workspace').hidden=true;$('login').hidden=false;$('report').innerHTML='<h2>Resumen del corte</h2>';$('adminResult').replaceChildren();$('receipt').replaceChildren();});
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{if(b.dataset.view==='checkout'&&me?.permissions.includes('sell')&&!me.shift){showShiftGate();return;}currentView=b.dataset.view;document.querySelectorAll('.view').forEach(v=>v.hidden=v.id!==currentView);document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('selected',x===b));$('pageTitle').textContent=b.textContent;$('workspace').classList.toggle('checkout-mode',currentView==='checkout');});
@@ -199,7 +199,7 @@ $('receive').onclick=()=>{
 };
 $('adjust').onclick=()=>modal('Ajuste por conteo, merma o caducidad',fields([{name:'batch_id',label:'ID lote (consulta lotes primero)',type:'number'},{name:'expected_quantity',label:'Existencia del sistema observada',type:'number'},{name:'counted_quantity',label:'Nueva existencia física',type:'number'},{name:'reason',label:'Justificación obligatoria'}]),async d=>{await api('/inventory/adjust',{batch_id:Number(d.batch_id),expected_quantity:Number(d.expected_quantity),counted_quantity:Number(d.counted_quantity),reason:d.reason});await searchProducts();notify('Ajuste registrado');});
 $('supplier').onclick=act(async()=>{table(await api('/suppliers'));modal('Guardar proveedor',fields([{name:'id',label:'ID (vacío para crear)',type:'number',optional:true},{name:'business_name',label:'Razón social'},{name:'contact',label:'Contacto',optional:true},{name:'phone',label:'Teléfono',optional:true},{name:'credit_days',label:'Días de crédito',type:'number',value:0}]),async d=>{const r=await api('/suppliers/save',{...d,id:d.id?Number(d.id):null,credit_days:Number(d.credit_days)});notify('Proveedor #'+r.id+' guardado');table(await api('/suppliers'));});});
-function customerForm(existing=null){modal(existing?'Editar cliente':'Registrar cliente',fields([{name:'name',label:'Nombre',value:existing?.name||''},{name:'phone',label:'Teléfono',value:existing?.phone||'',optional:true},{name:'discount',label:'Descuento (%)',value:(existing?.discount_bps||0)/100}]),async d=>{const result=await api('/customers/save',{id:existing?.id||null,name:d.name,phone:d.phone,discount_bps:cents(d.discount)});await loadCustomers();if(currentView==='credit')await loadCredit();notify('Cliente #'+result.id+' guardado');},existing?'Guardar cambios':'Registrar cliente');}
+function customerForm(existing=null){modal(existing?'Editar cliente':'Registrar cliente',fields([{name:'name',label:'Nombre',value:existing?.name||''},{name:'phone',label:'Teléfono',value:existing?.phone||'',optional:true},{name:'discount',label:'Descuento (%)',value:(existing?.discount_bps||0)/100}])+'<section id="customerPrivacyNotice" class="muted" aria-live="polite"></section>',async d=>{const result=await api('/customers/save',{id:existing?.id||null,name:d.name,phone:d.phone,discount_bps:cents(d.discount)});await loadCustomers();if(currentView==='credit')await loadCredit();notify('Cliente #'+result.id+' guardado');},existing?'Guardar cambios':'Registrar cliente');window.showCustomerPrivacyNotice?.($('customerPrivacyNotice'));}
 $('customerCreate').onclick=()=>customerForm();
 const userPermissionTemplates={
  seller:['sell','customers.manage'],
@@ -209,23 +209,33 @@ const userPermissionTemplates={
 function userTemplatePermissions(role){return role==='administrator'?Object.keys(me.permission_labels):(userPermissionTemplates[role]||[]);}
 $('users').onclick=act(async()=>{
  const users=await api('/users');
- const editable=users.filter(u=>u.id!==me.user.id);
+ const access=me.account_management;
+ const administrator=access.role==='administrator';
+ const editable=users.filter(u=>u.editable);
+ const labels=Object.entries(me.permission_labels).filter(([p])=>access.permissions.includes(p));
+ const adminPermissions=['users.manage','backup.manage'];
  const html='<label>Crear / editar usuario<select id="userAction"><option value="create">Crear un nuevo usuario</option><option value="edit">Editar usuario existente</option></select></label>'+
  '<label id="existingUserLabel" hidden>Usuario existente<select id="editUser"><option value="">Selecciona un usuario</option>'+editable.map(u=>`<option value="${u.id}">${esc(u.display_name)} (${esc(u.username)})${u.active?'':' · Inactivo'}</option>`).join('')+'</select></label>'+
- '<p id="userEditNote" class="muted" hidden>Para modificar tu propia cuenta, entra con otro administrador. Al guardar los cambios, el usuario editado deberá iniciar sesión nuevamente.</p>'+
+ '<p id="userEditNote" class="muted" hidden>Al guardar los cambios, el usuario editado deberá iniciar sesión nuevamente.</p>'+
  fields([{name:'username',label:'Nombre de acceso'},{name:'display_name',label:'Nombre visible'},{name:'secret',label:'PIN de al menos 6 dígitos o contraseña de 8 caracteres',type:'password',optional:true}])+
  '<p id="userPasswordNote" class="muted">La contraseña es obligatoria para crear la cuenta.</p><label><input type="checkbox" name="active" checked>Activo</label>'+
- '<label>Plantilla de permisos<select id="userRole"><option value="seller">Vendedor</option><option value="supervisor">Encargado / supervisor</option><option value="administrator">Administrador</option><option value="custom" hidden>Permisos personalizados</option></select></label>'+
+ '<label>Puesto<select id="userRole"><option value="seller">Vendedor</option>'+(administrator?'<option value="supervisor">Encargado / supervisor</option><option value="administrator">Administrador</option>':'')+'</select></label>'+
  '<p class="muted">Elegir una plantilla marca sus permisos. Después puedes activar o desactivar cada permiso de forma independiente.</p><h2>Permisos</h2>'+
- Object.entries(me.permission_labels).map(([p,label])=>`<label class="permission"><input type="checkbox" name="perm:${esc(p)}">${esc(label)}</label>`).join('');
+ labels.map(([p,label])=>`<label class="permission"><input type="checkbox" name="perm:${esc(p)}">${esc(label)}</label>`).join('');
  modal('Usuarios y permisos',html,async d=>{
   const editing=$('userAction').value==='edit';const id=editing?Number($('editUser').value):undefined;
   if(editing&&!id)throw Error('Selecciona el usuario que deseas editar');
-  await api('/users/save',{id,username:d.username,display_name:d.display_name,secret:d.secret,active:d.active?1:0,permissions:Object.keys(d).filter(k=>k.startsWith('perm:')).map(k=>k.slice(5))});
+  await api('/users/save',{id,role:$('userRole').value,username:d.username,display_name:d.display_name,secret:d.secret,active:d.active?1:0,permissions:Object.keys(d).filter(k=>k.startsWith('perm:')).map(k=>k.slice(5))});
   table(await api('/users'));notify(editing?'Usuario y permisos actualizados':'Usuario creado');
  });
  const form=$('dialogForm');
- function markPermissions(permissions){Object.keys(me.permission_labels).forEach(p=>form.elements['perm:'+p].checked=permissions.includes(p));}
+ function markPermissions(permissions){
+  for(const [p] of labels){
+   const checkbox=form.elements['perm:'+p];
+   checkbox.disabled=adminPermissions.includes(p)&&$('userRole').value!=='administrator';
+   checkbox.checked=!checkbox.disabled&&permissions.includes(p);
+  }
+ }
  function syncUser(){
   const editing=$('userAction').value==='edit';const user=editing?users.find(u=>u.id===Number($('editUser').value)):null;
   $('existingUserLabel').hidden=!editing;$('userEditNote').hidden=!editing;
@@ -234,13 +244,13 @@ $('users').onclick=act(async()=>{
   form.elements.display_name.value=user?.display_name||'';form.elements.secret.value='';form.elements.secret.required=!editing;
   form.elements.active.checked=user?!!user.active:true;
   $('userPasswordNote').textContent=editing?'Deja la contraseña vacía para conservar la actual.':'La contraseña es obligatoria para crear la cuenta.';
-  $('userRole').value=editing?'custom':'seller';markPermissions(user?.permissions||(!editing?userTemplatePermissions('seller'):[]));
+  if(administrator)$('userRole').querySelector('[value=administrator]').disabled=editing;
+  $('userRole').value=user?.role||'seller';markPermissions(user?.permissions||(!editing?userTemplatePermissions('seller'):[]));
   $('dialogSubmit').disabled=editing&&!user;$('dialogSubmit').textContent=editing?'Guardar cambios':'Crear usuario';
   $('dialogError').textContent=editing&&!editable.length?'No hay otras cuentas para editar. Crea una cuenta primero.':'';
  }
  $('userAction').onchange=()=>{$('editUser').value='';syncUser();};$('editUser').onchange=syncUser;
- $('userRole').onchange=()=>{if($('userRole').value!=='custom')markPermissions(userTemplatePermissions($('userRole').value));};
- Object.keys(me.permission_labels).forEach(p=>form.elements['perm:'+p].onchange=()=>{$('userRole').value='custom';});
+ $('userRole').onchange=()=>markPermissions(userTemplatePermissions($('userRole').value));
  syncUser();
 });
 function returnForm(kind){let requestKey=crypto.randomUUID(),lastSignature=null;modal(kind==='void'?'Anular ticket completo':'Devolver producto de un ticket',fields([{name:'sale_id',label:'Número de ticket',type:'number'},...(kind==='return'?[{name:'sale_item_id',label:'ID partida (consulta el ticket primero)',type:'number'},{name:'quantity',label:'Cantidad',type:'number',value:1}]:[]),{name:'reason',label:'Motivo'}])+(kind==='return'?'<label>Destino<select name="disposition"><option value="restock">Reingresar al lote original</option><option value="quarantine">Cuarentena (no vendible)</option></select></label>':'')+'<p>Los reembolsos se registran en los medios originales, primero efectivo. Ejecuta la devolución de tarjeta o transferencia en su terminal o banco.</p>',async d=>{const payload={sale_id:Number(d.sale_id),kind,reason:d.reason,...(kind==='return'?{items:[{sale_item_id:Number(d.sale_item_id),quantity:Number(d.quantity),disposition:d.disposition}]}:{})};const sig=JSON.stringify(payload);if(lastSignature&&lastSignature!==sig)requestKey=crypto.randomUUID();lastSignature=sig;const r=await api('/returns',{...payload,request_key:requestKey});await searchProducts();notify('Devolución registrada: '+money(r.total_cents));});}

@@ -9,12 +9,51 @@
  const el=id=>document.getElementById(id),form=el('settingsForm');
  const status=text=>el('settingsStatus').textContent=text;
  const base=location.pathname.startsWith('/direccion')?'/direccion/api':'/api';
+ if(base==='/api'){
+   const privacy=document.createElement('section');
+   privacy.innerHTML='<hr><h3>Aviso de privacidad</h3><p class="muted">Configura el aviso de tu negocio para mostrarlo al registrar clientes. El texto debe corresponder a los datos y servicios que realmente utilizas.</p><form><label>Responsable (nombre o razón social)<input name="responsible" required maxlength="160"></label><label>Domicilio del responsable<textarea name="address" required maxlength="400"></textarea></label><label>Para qué se usan los datos<textarea name="purposes" required maxlength="1000"></textarea></label><label>Contacto para ejercer derechos ARCO<input name="contact" required maxlength="250"></label><label>Aviso completo<textarea name="full_notice" required maxlength="12000" rows="6"></textarea></label><button type="submit">Guardar aviso</button><p role="status"></p></form>';
+   dialog.append(privacy);
+   const pf=privacy.querySelector('form'),feedback=pf.querySelector('[role=status]');
+   async function getNotice(){
+     const r=await fetch('/api/privacy-notice');
+     if(!r.ok)throw Error('No se pudo consultar el aviso.');
+     return r.json();
+   }
+   async function loadNotice(){
+     try{
+       const data=await getNotice();
+       for(const field of pf.elements)if(field.name)field.value=data[field.name]||'';
+       feedback.textContent='';
+     }catch(e){feedback.textContent=e.message;}
+   }
+   pf.onsubmit=async e=>{
+     e.preventDefault();
+     const submit=pf.querySelector('button');submit.disabled=true;
+     try{await post('/privacy-notice',Object.fromEntries(new FormData(pf)));feedback.textContent='Aviso guardado.';}
+     catch(error){feedback.textContent=error.message;}
+     finally{submit.disabled=false;}
+   };
+   window.showCustomerPrivacyNotice=async container=>{
+     if(!container)return;
+     container.textContent='Consultando el aviso de privacidad…';
+     try{
+       const data=await getNotice();
+       if(!data.full_notice){container.textContent='El negocio aún no ha configurado su aviso de privacidad. Consulta al responsable antes de pedir datos.';return;}
+       const heading=document.createElement('strong');heading.textContent='Aviso de privacidad';
+       const brief=document.createElement('p');brief.textContent=`${data.responsible} · ${data.address}. Datos de esta ficha: nombre, teléfono opcional y descuento. Uso: ${data.purposes} Para limitar el uso o ejercer derechos ARCO: ${data.contact}.`;
+       const details=document.createElement('details'),summary=document.createElement('summary'),full=document.createElement('div');
+       summary.textContent='Leer aviso completo';full.textContent=data.full_notice;full.style.whiteSpace='pre-wrap';details.append(summary,full);
+       container.replaceChildren(heading,brief,details);
+     }catch(e){container.textContent=e.message;}
+   };
+   dialog.addEventListener('privacy-settings-open',loadNotice);
+ }
  async function post(path,data){const response=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json','X-POS-Request':'1'},body:JSON.stringify(data)});const result=await response.json();if(!response.ok)throw Error(result.error||'No se pudo guardar');}
  async function load(){const response=await fetch('/business-settings');if(!response.ok)throw Error('No se pudo leer la configuración');const data=await response.json();window.businessSettings=data;document.title=data.name+(location.pathname.startsWith('/direccion')?' · Dirección':' · Punto de venta');
    for(const brand of document.querySelectorAll('.business-brand')){brand.querySelector('span').firstChild.textContent=data.name;const img=brand.querySelector('img');img.hidden=!data.has_logo;if(data.has_logo)img.src='/business-logo.png?t='+Date.now();}
    const img=el('settingsLogo');img.hidden=!data.has_logo;if(data.has_logo)img.src='/business-logo.png?t='+Date.now();el('noLogo').hidden=data.has_logo;el('settingsRemove').hidden=!data.has_logo;el('settingsUpload').textContent=data.has_logo?'Cambiar logotipo':'Subir logotipo';if(dialog.open)renderPreview();return data;
  }
- window.openBusinessSettings=async()=>{if(!canEdit)return;dialog.showModal();dialog.scrollTop=0;status('Cargando…');try{const data=await load();form.elements.name.value=data.name;form.elements.receipt_footer.value=data.receipt_footer;renderPreview();status('');}catch(e){status(e.message);}};
+ window.openBusinessSettings=async()=>{if(!canEdit)return;dialog.showModal();dialog.dispatchEvent(new Event('privacy-settings-open'));dialog.scrollTop=0;status('Cargando…');try{const data=await load();form.elements.name.value=data.name;form.elements.receipt_footer.value=data.receipt_footer;renderPreview();status('');}catch(e){status(e.message);}};
  document.addEventListener('brand-permission',e=>{canEdit=!!e.detail&&!window.ownerReadOnly;const button=el('settingsOpen');if(button)button.hidden=!canEdit;});
  el('settingsClose').onclick=()=>dialog.close();
  async function action(fn){if(pending)return;pending=true;dialog.querySelectorAll('button').forEach(b=>b.disabled=true);status('Guardando…');try{await fn();await load();status('Cambios guardados.');}catch(e){status(e.message||'No se pudo guardar. Revisa que el programa siga abierto.');}finally{pending=false;dialog.querySelectorAll('button').forEach(b=>b.disabled=false);}}

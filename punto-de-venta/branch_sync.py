@@ -51,6 +51,7 @@ def service_url(value):
 
 
 def snapshot(pos):
+    import remote_privacy
     today = dt.date.today()
     with pos.request_lock, pos.db() as db:
         report = analytics.history(db, {'from': (today-dt.timedelta(days=30)).isoformat(), 'to': today.isoformat()}, True)
@@ -59,7 +60,7 @@ def snapshot(pos):
         fields=('id','barcode','name','price_cents','cost_cents','reorder_point','stock','physical_stock')
         products=[{key:p[key] for key in fields} for p in sorted(direction['products'],key=lambda p:p['id'])]
     return {'version': 2, 'currency': 'MXN', 'generated_at': dt.datetime.now(dt.timezone.utc).isoformat(),
-            'today': today.isoformat(), 'daily': report['daily'], 'products': products,'direction':direction}
+            'today': today.isoformat(), 'daily': report['daily'], 'products': products,'direction':remote_privacy.direction(direction)}
 
 
 class BranchSync:
@@ -144,6 +145,7 @@ class BranchSync:
         else:self.message = f'Conectado. Historial en proceso: faltan {remaining} fechas.' if remaining else 'Conectado. Panel e historial enviados a la página del dueño.'
 
     def sync_days(self,link,sender=None):
+        import remote_privacy
         days=sorted(self.cached['direction']['history_days'],reverse=True)
         with database(self.path) as store:sent=dict(store.execute('SELECT day,fingerprint FROM sent_days'))
         pending=[day for day in days if sent.get(day)!=self.cached['direction']['history_fingerprints'][day]]
@@ -154,11 +156,11 @@ class BranchSync:
             expected=self.cached['direction']['history_fingerprints'][day]
             if sent.get(day)==expected:continue
             with self.pos.request_lock,self.pos.db() as db:
-                fingerprint=direction_replica.day_fingerprint(db,day)
+                fingerprint=remote_privacy.fingerprint(direction_replica.day_fingerprint(db,day))
                 report=analytics.history(db,{'from':day,'to':day},True)
                 report['inventory_adjustments']=direction_replica.product_adjustments(db,day)
                 report['inventory_adjustments_available']=True
-                report=retained_history(report,day)
+                report=retained_history(remote_privacy.history(report),day)
             with self.lock,database(self.path) as store:
                 active=store.execute('SELECT url,token,revision FROM link WHERE id=1').fetchone()
                 if not active or active[:2]!=link[:2]:return len(pending)
@@ -181,8 +183,13 @@ class BranchSync:
 
     def send_payload(self,url,token,body,route,sender=None):
         if len(body)>16_000_000:raise Error('El documento supera 16 MB. Reduce el intervalo o revisa el catálogo; no se publicó información parcial.')
-        target=hashlib.sha256((url+'|'+token).encode()).hexdigest()
-        with database(self.path) as db:old=db.execute('SELECT body FROM outbox WHERE target=? AND route=?',(target,route)).fetchone()
+        from remote_privacy import fingerprint
+        legacy_target=hashlib.sha256((url+'|'+token).encode()).hexdigest()
+        target=fingerprint(legacy_target)
+        with database(self.path) as db:
+            # Nunca reenvía un documento pendiente con el formato anterior.
+            db.execute('DELETE FROM outbox WHERE target=?',(legacy_target,))
+            old=db.execute('SELECT body FROM outbox WHERE target=? AND route=?',(target,route)).fetchone()
         if old and bytes(old[0])!=body:self._send_document(url,token,bytes(old[0]),route,target,sender)
         return self._send_document(url,token,body,route,target,sender)
 
@@ -202,17 +209,17 @@ class BranchSync:
             cursor=db.execute('SELECT next_part FROM outbox WHERE target=? AND route=?',(target,route)).fetchone()[0]
         pieces=[body[i:i+250000] for i in range(0,len(body),250000)];digest=hashlib.sha256(body).hexdigest()
         result=None
+        expected=json.loads(body)['revision']
         for attempt in range(2):
             for index in range(cursor,len(pieces)):
                 packet={'kind':route.split(':')[0],'part':index,'total':len(pieces),'digest':digest,'upload_id':digest,'data':base64.b64encode(pieces[index]).decode()}
                 result=send('transfer',json.dumps(packet,separators=(',',':')).encode())
                 if result.get('ok') is not True:raise Error('No se confirmó un bloque de sincronización')
+                if result.get('revision')==expected:
+                    with database(self.path) as db:db.execute('DELETE FROM outbox WHERE target=? AND route=?',(target,route))
+                    return result
                 if index<len(pieces)-1 and (result.get('part')!=index or result.get('complete') is not False):raise Error('Confirmación de bloque inválida')
                 with database(self.path) as db:db.execute('UPDATE outbox SET next_part=? WHERE target=? AND route=?',(index if index==len(pieces)-1 else index+1,target,route))
-            expected=json.loads(body)['revision']
-            if result and result.get('revision')==expected:
-                with database(self.path) as db:db.execute('DELETE FROM outbox WHERE target=? AND route=?',(target,route))
-                return result
             cursor=0
         raise Error('Faltan bloques. Se conservó el envío para reintentar sin publicar datos incompletos.')
 

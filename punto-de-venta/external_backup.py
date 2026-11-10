@@ -2,6 +2,8 @@
 import datetime as dt
 import hashlib,json,os,re
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+from backup_crypto import PORTABLE
 from core import Error
 
 def config_path(pos):return Path(pos.path).parent/'respaldo-externo.json'
@@ -25,18 +27,21 @@ def write_copy(pos,source):
         if not folder.is_dir():raise OSError('Destino no disponible')
         destination=folder/'LunaDevPOS-respaldos-automaticos';destination.mkdir(exist_ok=True)
         if destination.is_symlink():raise OSError('Destino no válido')
-        raw=Path(source).read_bytes();document=json.loads(raw);saved=document.pop('sha256')
-        from core import fingerprint
-        if saved!=fingerprint(document):raise ValueError('Respaldo inválido')
-        target=destination/Path(source).name;temporary=target.with_suffix('.tmp')
+        raw=Path(source).read_bytes()
+        if not raw.startswith(PORTABLE):
+            return {'configured':True,'ok':False,'warning':'Configura una frase de respaldo portátil para guardar copias recuperables fuera de esta computadora.'}
+        target=destination/Path(source).name
+        temporary=None
         try:
-            with temporary.open('wb') as f:f.write(raw);f.flush();os.fsync(f.fileno())
+            with NamedTemporaryFile(dir=destination,delete=False) as f:
+                temporary=Path(f.name);f.write(raw);f.flush();os.fsync(f.fileno())
             if hashlib.sha256(temporary.read_bytes()).digest()!=hashlib.sha256(raw).digest():raise OSError('Copia incompleta')
             os.replace(temporary,target)
-        finally:temporary.unlink(missing_ok=True)
+        finally:
+            if temporary is not None:temporary.unlink(missing_ok=True)
         cutoff=dt.datetime.now(dt.timezone.utc)-dt.timedelta(days=30)
         for item in destination.iterdir():
-            match=re.fullmatch(r'turno-\d+-(\d{8}T\d{12}Z)\.botica\.json',item.name)
+            match=re.fullmatch(r'turno-\d+-(\d{8}T\d{12}Z)\.botica(?:\.json)?',item.name)
             if match and item.is_file() and not item.is_symlink():
                 try:
                     if dt.datetime.strptime(match[1],'%Y%m%dT%H%M%S%fZ').replace(tzinfo=dt.timezone.utc)<=cutoff:item.unlink()

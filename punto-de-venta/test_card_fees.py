@@ -35,7 +35,7 @@ class FeeTest(unittest.TestCase):
  def test_excel_and_backup_complete(self):
   self.config();self.sell_card();r=self.history();wb=load_workbook(io.BytesIO(export_history_xlsx(r)),data_only=True)
   self.assertIn('Comisiones tarjeta',wb.sheetnames);sheet=wb['Comisiones tarjeta'];self.assertEqual(sheet['E6'].value,4.06);self.assertEqual(sheet['F6'].value,95.94)
-  raw,_,_=inventory_io.backup(self.pos,1);doc=json.loads(raw);self.assertEqual(doc['version'],11);self.assertEqual(doc['tables']['card_fees'][0]['fee_cents'],406)
+  raw,_,_=inventory_io.backup(self.pos,1);doc=json.loads(raw);self.assertEqual(doc['version'],12);self.assertEqual(doc['tables']['card_fees'][0]['fee_cents'],406)
  def test_small_amount_rounding_consistent(self):
   cfg=self.config()
   for n in range(1,20000):

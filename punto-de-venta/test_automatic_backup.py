@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 import unittest
 import inventory_io
+from backup_crypto import LOCAL, unseal
 import test_pos
 from core import POS
 
@@ -26,7 +27,8 @@ class AutomaticBackupTest(unittest.TestCase):
         raw = Path(result['automatic_backup']['path']).read_bytes()
         self.assertFalse(old.exists())
         self.assertTrue(manual.exists())
-        document = json.loads(raw)
+        self.assertTrue(raw.startswith(LOCAL))
+        document = json.loads(unseal(raw))
         self.assertIsNotNone(document['tables']['cash_shifts'][0]['closed_at'])
         fresh = POS(Path(self.temp.name)/'restore.db')
         fresh.initialize('temp', 'temporary-password')

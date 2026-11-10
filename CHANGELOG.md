@@ -1,5 +1,14 @@
 # Historial de versiones
 
+## 0.2.0-rc.3 — 2026-11-10
+
+- Jerarquía de cuentas y bitácora de cambios de usuarios, con protección de administradores y restauración limitada a una instalación inicial.
+- Sesiones e intentos de acceso separados entre Dirección y Mostrador. La consulta remota usa HTTPS.
+- Respaldos nuevos cifrados, con frase para copias portátiles y lectura de respaldos anteriores.
+- Autorización previa a cargas de archivos y límite de concurrencia.
+- Validación de la réplica central, aislamiento de documentos dañados, límites por sucursal y protección de CSV.
+- Aviso de privacidad configurable y reducción de identificadores y notas libres en la réplica central.
+
 ## 0.2.0-rc.2 — 2026-10-26
 
 - Evaluación interna documentada con referencias ASVS, WSTG y SSDF; pruebas adversarias y de carga reproducibles.

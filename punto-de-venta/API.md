@@ -161,6 +161,6 @@ Ante una respuesta perdida, reintenta ventas/devoluciones con **la misma clave y
 - GET `/api/inventory/undated`: lista hasta 200 lotes con stock sin fecha.
 - POST `/api/inventory/batch/edit`: `{batch_id, lot_number?, expires_on?, reason}`; permiso `inventory.adjust`.
 
-Los archivos admiten hasta 64 MB antes de codificar a base64 y la importación admite hasta 50,000 registros. Los respaldos Botica actuales son versión 11; el inventario JSON usa formato botica-inventory, versión 1. En recepción, proveedor, lote y expires_on ahora son opcionales; fecha vacía se guarda como NULL.
+Los archivos admiten hasta 64 MB antes de codificar a base64 y la importación admite hasta 50,000 registros. Los respaldos Botica actuales son versión 12 (incluyen el aviso de privacidad; se conservan las importaciones de versiones anteriores); el inventario JSON usa formato botica-inventory, versión 1. En recepción, proveedor, lote y expires_on ahora son opcionales; fecha vacía se guarda como NULL.
 
 Historial general, CSV y Excel requieren reports.view. Las rutas /api/cash, /api/inventory/restock y /api/inventory/receive exigen request_key. /api/operations/prepare, pending, ack y cancel permiten recuperar o cancelar el mismo intento de forma durable y aislada por usuario. Las cancelaciones no borran operaciones ya confirmadas.

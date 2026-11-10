@@ -5,24 +5,13 @@ from urllib.parse import urlsplit
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError
 from pathlib import Path
-import json, os, re, subprocess, threading, socket, ipaddress
+import json, os, re, subprocess, threading
 from core import ROOT, Error
 from owner_gate import PrivateGate,PAGE as GATE_PAGE,SCRIPT as GATE_SCRIPT
 
 GET_ROUTES={'/direccion','/direccion/','/direccion/panel.js','/style.css','/reports.js','/branding.js','/navigation.js','/favicon.svg','/business-settings','/business-logo.png','/direccion/api/summary','/direccion/api/history','/direccion/api/history.csv','/direccion/api/history.xlsx','/direccion/api/metrics'}
 GET_ROUTES.update({'/login-hints.js','/live-view.js'})
 POST_ROUTES={'/direccion/api/login','/direccion/api/logout'}
-
-def private_address(value):
-    try:
-        address=ipaddress.ip_address(value)
-        return address.version==4 and (address.is_loopback or any(address in ipaddress.ip_network(n) for n in ('10.0.0.0/8','172.16.0.0/12','192.168.0.0/16')))
-    except ValueError:return False
-
-def local_addresses():
-    try:addresses={r[4][0] for r in socket.getaddrinfo(socket.gethostname(),None,socket.AF_INET)}
-    except OSError:addresses=set()
-    return sorted(a for a in addresses if private_address(a) and not a.startswith('127.'))
 
 class BridgeHandler(BaseHTTPRequestHandler):
     def setup(self):
@@ -35,12 +24,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         raw=json.dumps({'error':message},ensure_ascii=False).encode();self.send_response(status);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(raw)
     def forward(self,write):
         manager=self.server.manager;path=urlsplit(self.path).path
-        local=getattr(self.server,'local_mode',False)
         host=self.headers.get('Host','')
-        hosts=self.server.allowed_hosts if local else {manager.hostname,f'127.0.0.1:{self.server.server_port}'}
-        if local and not private_address(self.client_address[0]):return self.error(403,'Acceso disponible solo en la red local')
+        hosts={manager.hostname,f'127.0.0.1:{self.server.server_port}'}
         if host not in hosts:return self.error(403,'Host no permitido')
-        gate=getattr(manager,'gate',None) if not local else None
+        gate=getattr(manager,'gate',None)
         if gate and path=='/owner-gate.js' and not write:return self.gate_response(200,GATE_SCRIPT,'text/javascript')
         if gate and path=='/owner-access/verify' and write:
             if self.headers.get('Origin','')!=f'https://{manager.hostname}' or self.headers.get('X-POS-Request')!='1':return self.error(403,'Origen no permitido')
@@ -64,7 +51,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if self.headers.get('Cookie'):headers['Cookie']=self.headers['Cookie']
         body=None
         if write:
-            origin=self.headers.get('Origin','');allowed={f'http://{host}'} if local else {f'https://{manager.hostname}',f'http://127.0.0.1:{self.server.server_port}'}
+            origin=self.headers.get('Origin','');allowed={f'https://{manager.hostname}',f'http://127.0.0.1:{self.server.server_port}'}
             if not origin or origin not in allowed or self.headers.get('X-POS-Request')!='1':return self.error(403,'Origen no permitido')
             if self.headers.get('Content-Type','').split(';')[0]!='application/json':return self.error(415,'Usa application/json')
             try:length=int(self.headers.get('Content-Length','0'))
@@ -82,7 +69,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self.send_response(response.status)
                 for key,value in response.headers.items():
                     if key.lower() in ('content-type','content-disposition','content-security-policy','referrer-policy','x-content-type-options'):self.send_header(key,value)
-                    if key.lower()=='set-cookie':self.send_header(key,value if local else value+'; Secure')
+                    if key.lower()=='set-cookie':self.send_header(key,value+'; Secure')
                 self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(raw)
         except (OSError,ValueError):self.error(502,'No se pudo consultar el punto de venta. Intenta nuevamente.')
 
@@ -101,16 +88,7 @@ class OwnerAccess:
             if url and self.gate:url+='#access='+self.gate.key
             return {'available':True,'state':self.state,'email':self.email,'mode':self.mode,'url':url, 'local_enabled':bridge is not None,'local_urls':[f'http://{a}:{bridge.server_port}/direccion/' for a in addresses] if bridge else []}
     def start_local(self):
-        self.stop_local()
-        addresses=local_addresses()
-        if not addresses:raise Error('No se encontró una dirección de red local. Conecta la computadora al Wi-Fi o al cable de red.')
-        bridge=None
-        for port in range(18786,18806):
-            try:bridge=ThreadingHTTPServer(('0.0.0.0',port),BridgeHandler);break
-            except OSError:continue
-        if bridge is None:raise Error('No se pudo abrir el acceso local. Revisa el firewall y vuelve a intentar.')
-        bridge.manager=self;bridge.local_mode=True;bridge.allowed_hosts={f'{a}:{bridge.server_port}' for a in [*addresses,'127.0.0.1']};bridge.daemon_threads=True;bridge.block_on_close=False
-        self.local_ips=addresses;self.local_bridge=bridge;self.local_thread=threading.Thread(target=bridge.serve_forever,daemon=True);self.local_thread.start();return self.status()
+        raise Error('El acceso local por HTTP está deshabilitado. Usa Dirección mediante un enlace HTTPS.',403)
     def stop_local(self):
         if self.local_bridge:self.local_bridge.shutdown();self.local_bridge.server_close()
         if self.local_thread:self.local_thread.join(timeout=2)

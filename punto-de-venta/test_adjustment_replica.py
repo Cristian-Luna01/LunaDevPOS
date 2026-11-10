@@ -8,7 +8,7 @@ class AdjustmentReplicaTest(unittest.TestCase):
     tearDown=test_pos.POSTest.tearDown
     receive=test_pos.POSTest.receive
 
-    def test_adjustment_only_day_syncs_author_reason_and_fingerprint(self):
+    def test_adjustment_only_day_syncs_counts_and_keeps_author_and_reason_local(self):
         today=dt.date.today().isoformat()
         with self.pos.db() as db:
             before=direction_replica.day_fingerprint(db,today)
@@ -22,6 +22,8 @@ class AdjustmentReplicaTest(unittest.TestCase):
             after=direction_replica.day_fingerprint(db,today)
             self.assertNotEqual(before,after)
             self.assertEqual(after,current['history_fingerprints'][today])
+            local=direction_replica.product_adjustments(db,today)[0]
+            self.assertEqual(local['reason'],'Conteo físico: faltan dos')
         sync=BranchSync(self.pos);sync.configure({'url':'https://qa.workers.dev','name':'Centro','token':'c'*64});sent=[]
         def send(url,token,body):
             data=json.loads(body);sent.append(data);return {'ok':True,'revision':data['revision']}
@@ -29,8 +31,8 @@ class AdjustmentReplicaTest(unittest.TestCase):
         report=next(p['report'] for p in sent if p.get('day')==today)
         a=report['inventory_adjustments'][0]
         self.assertEqual((a['before'],a['after'],a['difference']),(20,18,-2))
-        self.assertEqual(a['reason'],'Conteo físico: faltan dos')
-        self.assertTrue(a['user_name'])
+        self.assertEqual(a['reason'],'Consulta el motivo en el POS local')
+        self.assertEqual(a['user_name'],'Operador')
         self.assertEqual(report['totals']['net_cents'],0)
 
     def test_price_change_requires_reason_and_records_exact_before_after(self):

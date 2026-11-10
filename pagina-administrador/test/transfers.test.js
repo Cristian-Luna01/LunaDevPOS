@@ -14,9 +14,19 @@ test('envío mayor a dos MB se almacena en bloques y se publica completo una sol
  for(const part of parts.slice(0,-1)){const r=await worker.fetch(req('transfer',part,'',branch.token),env);assert.equal(r.status,200);assert.equal((await r.json()).complete,false);}
  assert.equal(env.sqlite.prepare('SELECT revision FROM branches WHERE id=?').get(branch.id).revision,0);
  const last=parts.at(-1);assert.equal((await worker.fetch(req('transfer',last,'',branch.token),env)).status,200);
- assert.equal((await worker.fetch(req('transfer',last,'',branch.token),env)).status,200);
+ const repeated=await worker.fetch(req('transfer',last,'',branch.token),env);assert.deepEqual(await repeated.json(),{ok:true,revision:p.revision});
+ assert.equal(env.sqlite.prepare('SELECT count(*) n FROM upload_parts WHERE part>=0').get().n,0);
  const result=await(await worker.fetch(req('branches',null,cookie),env)).json();assert.deepEqual(result.branches[0].snapshot,p);
  const stored=JSON.parse(env.sqlite.prepare('SELECT payload FROM branches WHERE id=?').get(branch.id).payload);assert.ok(stored.__chunked);assert.ok(env.sqlite.prepare('SELECT max(length(CAST(data AS BLOB))) n FROM document_chunks').get().n<2000000);
+ env.sqlite.close();
+});
+test('el límite de cargas pendientes de un local no bloquea las de otro',async()=>{
+ const {env,cookie,branch}=await setup(),other=await(await worker.fetch(req('branches',{name:'Otro'},cookie),env)).json();
+ const insert=env.sqlite.prepare('INSERT INTO upload_parts VALUES(?,?,0,2,?,?,?,?)');
+ for(let i=0;i<128;i++){const id=digest(String(i));insert.run(branch.id,id,'snapshot',id,'AA==',Date.now());}
+ const id=digest('new'),packet={kind:'snapshot',part:0,total:2,digest:id,upload_id:id,data:'AA=='};
+ assert.equal((await worker.fetch(req('transfer',packet,'',branch.token),env)).status,400);
+ assert.equal((await worker.fetch(req('transfer',packet,'',other.token),env)).status,200);
  env.sqlite.close();
 });
 test('bloques incompletos, corruptos o de otro local nunca publican una instantánea parcial',async()=>{

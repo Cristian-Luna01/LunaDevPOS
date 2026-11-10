@@ -1,3 +1,16 @@
+const extraCounts=['sold_units','returned_units','zero_cost_units','tax_cents','card_fee_cents','card_fee_unconfigured_cents'];
+const amounts=['sales_cents','refunds_cents','net_cents','tickets','credit_cents','cost_cents','profit_cents',...extraCounts];
+export function validateAmounts(value){
+ if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Totales inválidos');
+ for(const key of amounts)if(Object.hasOwn(value,key)&&(!Number.isSafeInteger(value[key])||Math.abs(value[key])>1e12))throw Error('Importe o cantidad inválida');
+ if(Object.hasOwn(value,'payments_by_method')){
+  const methods=value.payments_by_method;
+  if(!methods||typeof methods!=='object'||Array.isArray(methods))throw Error('Medios de pago inválidos');
+  for(const key of ['cash','card','transfer']){
+   const amount=methods[key];if(amount!==undefined&&(!Number.isSafeInteger(amount)||Math.abs(amount)>1e12))throw Error('Medio de pago inválido');
+  }
+ }
+}
 export function validateSnapshot(p){
  if(!p||![1,2].includes(p.version)||p.currency!=='MXN'||!Number.isSafeInteger(p.revision)||p.revision<1)throw Error('Actualización inválida');
  if(typeof p.instance_id!=='string'||!/^([a-f0-9]{32})$/.test(p.instance_id))throw Error('Computadora inválida');
@@ -19,7 +32,7 @@ export function validateSnapshot(p){
   if(r.inventory_value_cents!==undefined&&(!Number.isSafeInteger(r.inventory_value_cents)||r.inventory_value_cents<0))throw Error('Valor de inventario inválido');
   for(const k of ['stock','price_cents','cost_cents','reorder_point'])if(!Number.isSafeInteger(r[k])||r[k]<0||r[k]>1e12)throw Error('Existencia inválida');
  }
- if(p.version===2){const d=p.direction;if(!d||d.day!==p.today||!Array.isArray(d.products)||!Array.isArray(d.shifts)||!Array.isArray(d.suppliers)||!Array.isArray(d.history_days)||!d.history_fingerprints)throw Error('Panel incompleto');for(const day of d.history_days)if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^[a-f0-9]{64}$/.test(d.history_fingerprints[day]||''))throw Error('Historial inválido');}
+ if(p.version===2){const d=p.direction;if(!d||d.day!==p.today||!Array.isArray(d.products)||!Array.isArray(d.shifts)||!Array.isArray(d.suppliers)||!Array.isArray(d.history_days)||!d.history_fingerprints)throw Error('Panel incompleto');for(const day of d.history_days)if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^[a-f0-9]{64}$/.test(d.history_fingerprints[day]||''))throw Error('Historial inválido');validateAmounts(d);if(d.shifts.some(s=>!Number.isSafeInteger(s?.id))||d.suppliers.some(s=>!Number.isSafeInteger(s?.credit_days)))throw Error('Turno o proveedor inválido');}
  return p;
 }
 

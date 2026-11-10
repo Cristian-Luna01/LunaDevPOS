@@ -4,8 +4,11 @@ const costs=r=>['tax_cents','cost_cents','profit_cents'].map(k=>(r[k]||0)/100),e
 const serial=s=>(Date.parse(s.replace(' ','T')+(s.length===10?'T00:00:00Z':s.endsWith('Z')?'':'Z'))-Date.UTC(1899,11,30))/86400000;
 export function exportCSV(r,summary=false){
  const heads=summary?['Fecha local','Cobros antes de devoluciones MXN','Devoluciones MXN','Ventas totales MXN','Unidades entregadas','Unidades devueltas','Tickets',...extra,'Cobrado en efectivo MXN','Cobrado con tarjeta MXN','Cobrado por transferencia MXN','Entradas de caja MXN','Salidas de caja MXN','Cobertura del detalle']:['Fecha local','Hora local','Movimiento','Ticket original','Devolución','Partida','Código','Producto','Unidades (+venta/-devolución)','Importe MXN (+venta/-devolución)','Estado actual del ticket',...extra];
- const rows=summary?r.daily.map(d=>[d.day,...['sales_cents','refunds_cents','net_cents'].map(k=>(d[k]/100).toFixed(2)),d.sold_units,d.returned_units,d.tickets,...costs(d).map(v=>v.toFixed(2)),...['cash','card','transfer'].map(k=>(d.payments_by_method[k]/100).toFixed(2)),((d.cash_in_cents||0)/100).toFixed(2),((d.cash_out_cents||0)/100).toFixed(2),r.detail_coverage?.summary_days.includes(d.day)?'Resumen histórico':'Detalle disponible']):r.events.map(e=>[e.day,e.happened_at,e.kind,safe(e.ticket_id),e.return_id||'',e.item_id,safe(e.barcode),safe(e.name),e.units,(e.cents/100).toFixed(2),e.status,...costs(e).map(v=>v.toFixed(2))]);
- const cell=v=>'"'+String(v??'').replace(/"/g,'""')+'"';return '\ufeff'+[heads,...rows].map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n';
+ const rows=summary?r.daily.map(d=>[d.day,...['sales_cents','refunds_cents','net_cents'].map(k=>(d[k]/100).toFixed(2)),d.sold_units,d.returned_units,d.tickets,...costs(d).map(v=>v.toFixed(2)),...['cash','card','transfer'].map(k=>(d.payments_by_method[k]/100).toFixed(2)),((d.cash_in_cents||0)/100).toFixed(2),((d.cash_out_cents||0)/100).toFixed(2),r.detail_coverage?.summary_days.includes(d.day)?'Resumen histórico':'Detalle disponible']):r.events.map(e=>[e.day,e.happened_at,e.kind,e.ticket_id,e.return_id||'',e.item_id,e.barcode,e.name,e.units,(e.cents/100).toFixed(2),e.status,...costs(e).map(v=>v.toFixed(2))]);
+ // These columns are formatted from numeric arithmetic above; keep their signed values numeric.
+ const decimals=new Set(summary?[1,2,3,7,8,9,10,11,12,13,14]:[9,11,12,13]);
+ const cell=(v,i)=>'"'+(typeof v==='string'&&!decimals.has(i)?safe(v):String(v??'')).replace(/"/g,'""')+'"';
+ return '\ufeff'+[heads,...rows].map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n';
 }
 const column=n=>{let s='';while(n){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26);}return s;};
 function sheet(title,r,heads,rows,money=[],dates=[]){
